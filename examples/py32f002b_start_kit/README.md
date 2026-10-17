@@ -19,16 +19,24 @@
 
 ```
 examples/py32f002b_start_kit/
+├── app/         # 应用层：Application 单例与事件循环（唯一的业务入口）
+├── bsp/         # 板级支持包：Board 单例、HAL 回调转发、UART 驱动
+├── port/        # mcu_cmsis.h：唯一的 MCU 依赖点
 ├── Core/        # 厂商生成的外设初始化与中断入口（main.c / *_it.c）
 ├── Drivers/     # CMSIS + PY32F002B HAL（只保留本范例用到的文件）
-├── main/        # 应用层与 BSP
-│   ├── application.cpp/.hpp   # 事件循环（Application 单例）
-│   ├── mcu_cmsis.h            # MCU 桥接头
-│   ├── board/                 # BSP：Board 单例、HAL 回调转发、1ms tick 接入
-│   └── serial/                # 板级 UART 驱动（中断收 + 流缓冲 + 非阻塞发）
 ├── EIDE/        # EIDE 工程：.eide / .vscode / 链接脚本 / 启动文件
 └── README.md
 ```
+
+分层与仓库 `SKILL.md` 中的定义完全一致：
+
+| 目录 | 层 | 职责 |
+|---|---|---|
+| `app/` | 应用 | 事件号、事件队列、handler、状态机；只认识 `Board` 暴露的接口 |
+| `bsp/` | BSP | 持有 HAL 句柄、构造驱动、独占并转发 HAL 弱回调、接入 1ms tick |
+| `port/` | 移植 | `mcu_cmsis.h`，换 MCU 只改这里 |
+| `Core/`、`Drivers/` | 厂商 | 时钟/外设初始化、CMSIS、HAL |
+| 仓库根目录 | 工具库 | `queue.hpp` / `stream_buffer.hpp` / `timers.hpp` / `irq_lock.hpp` |
 
 `queue.hpp`、`stream_buffer.hpp`、`timers.hpp`、`irq_lock.hpp` **直接来自仓库根目录，本目录没有复制一份**。EIDE 工程通过 `incList` 里的 `../../..` 指向仓库根目录，所以 `#include "queue.hpp"` 能正常解析；如果移动了本目录的位置，需要同步修改该路径。
 
@@ -46,17 +54,21 @@ examples/py32f002b_start_kit/
 ## 代码导读（一条完整调用链）
 
 1. `Core/SRC/main.c`：初始化时钟与外设，最后调用 `app_main()`。
-2. `main/application.cpp`
+2. `app/application.cpp`
    - 构造函数：创建 1000 ms 周期 `timer`、注册 BSP 通知回调、投递 `START_EVENT`；
    - `Start()`：全工程唯一的事件循环，`pop` → `switch` → `HandleXxx()`。
-3. `main/board/board.cpp`
+3. `bsp/board.cpp`
    - `Board::GetInstance()` 单例，持有 UART 驱动对象；
    - `HAL_USART_RxCpltCallback` 只把事件转给 `Serial::HandleRxCpltEvent()`；
    - `HAL_IncTick` 里调用 `timer::OnMilliSecondTick()` —— 这就是 1ms tick 的唯一接入点。
-4. `main/serial/serial.hpp`：1 字节中断接收 + `stream_buffer` + `HAL_UART_Transmit_IT` 非阻塞发送。
-5. `main/mcu_cmsis.h`：`#include "py32f0xx.h"`，`irq_lock` 的唯一 MCU 依赖点。
+4. `bsp/serial.hpp`：1 字节中断接收 + `stream_buffer` + `HAL_UART_Transmit_IT` 非阻塞发送。
+5. `port/mcu_cmsis.h`：`#include "py32f0xx.h"`，`irq_lock` 的唯一 MCU 依赖点。
+
+## 作为新工程的模板
+
+新建工程时直接复制本目录的 `app/`、`bsp/`、`port/` 三层，再按目标板替换实现即可，步骤见仓库 `SKILL.md` 的「用范例生成工程骨架」一节。不要复制 `Drivers/`、`Core/`，它们应当由目标 MCU 的厂商工具生成。
 
 ## 注意
 
-- `main/board`、`main/serial` 是**这块板子的 BSP 实现**，用于演示运行效果；换板时请按仓库 `SKILL.md` 的契约重新实现，不要直接复制。
+- `bsp/` 是**这块板子的 BSP 实现**，用于演示运行效果；换板时请按仓库 `SKILL.md` 的契约重新实现，不要直接复制。
 - 事件回调运行在中断上下文，只能投递事件，不要在里面解析协议或阻塞。

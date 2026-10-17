@@ -4,7 +4,8 @@ type: ARM
 deviceName: PY32F002Bx5
 packDir: ""
 srcDirs:
-  - ../main
+  - ../app
+  - ../bsp
 virtualFolder:
   name: <virtual_root>
   files: []
@@ -70,9 +71,9 @@ targets:
         - ../Drivers/PY32F002B_HAL_Driver/Inc
         - ../Drivers/CMSIS/Device/PY32F0xx/Include
         - ../../..
-        - ../main
-        - ../main/serial
-        - ../main/board
+        - ../port
+        - ../app
+        - ../bsp
       libList: []
     excludeList: []
     settings:

@@ -2,6 +2,8 @@
 
 #include "serial.hpp"
 
+// BSP：板级资源与 HAL 回调的唯一入口（单例）。
+// 应用层只通过这里获取资源，不直接接触厂商 HAL。
 class Board {
 public:
 	static Board &GetInstance() {

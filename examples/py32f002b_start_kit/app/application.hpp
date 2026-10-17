@@ -4,6 +4,8 @@
 
 #include "timers.hpp"
 
+// 应用层：全工程唯一的事件循环（单例）。
+// 中断只通过 PostXxx() 投递事件，业务全部在 Start() 的派发循环里处理。规则见仓库 SKILL.md。
 class Application {
 public:
 	static Application &GetInstance() {

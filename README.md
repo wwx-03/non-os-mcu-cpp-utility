@@ -89,7 +89,7 @@ int main()
 - UART 中断接收 → `stream_buffer` → BSP 回调 → `queue` → `Application` 事件循环；
 - `Board` 单例作为 BSP，独占 HAL 句柄与 HAL 弱回调。
 
-范例直接引用本仓库根目录的头文件（EIDE `incList` 中的 `../../..`），不复制一份库代码，因此始终与仓库版本一致。
+范例直接引用本仓库根目录的头文件（EIDE `incList` 中的 `../../..`），不复制一份库代码，因此始终与仓库版本一致。目录按 `app/`（应用）、`bsp/`（板级）、`port/`（MCU 桥接）分层，可直接作为新工程的模板。
 
 ## 工程模式
 
@@ -157,12 +157,16 @@ non-os-mcu-cpp-utility/
 ├── .github/skills/mcu-baremetal-event-loop/
 │   ├── SKILL.md
 │   └── references/adapter-templates.md
-└── examples/py32f002b_start_kit/
-    ├── Core/
-    ├── Drivers/
-    ├── main/
-    ├── EIDE/
-    └── README.md
+└── examples/
+    ├── README.md
+    └── py32f002b_start_kit/
+        ├── app/
+        ├── bsp/
+        ├── port/
+        ├── Core/
+        ├── Drivers/
+        ├── EIDE/
+        └── README.md
 ```
 
 ## 约束

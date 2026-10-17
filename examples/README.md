@@ -1,0 +1,36 @@
+# 范例工程
+
+每个子目录都是一个**独立可编译**的工程，直接引用仓库根目录的头文件，不复制库代码。
+
+| 范例 | MCU | 演示内容 |
+|---|---|---|
+| [py32f002b_start_kit](./py32f002b_start_kit/README.md) | PY32F002Bx5 | 1ms tick 软件定时器、UART 中断收 + `stream_buffer`、`queue` 事件循环、`Board` BSP 单例 |
+
+## 目录约定
+
+所有范例都按同一分层组织，与仓库 `SKILL.md` 一致：
+
+```
+<example>/
+├── app/        # 应用层：Application 单例、事件号、handler
+├── bsp/        # 板级支持包：Board 单例、驱动、HAL 回调转发
+├── port/       # mcu_cmsis.h：唯一的 MCU 依赖点
+├── Core/       # 厂商生成的初始化与中断入口
+├── Drivers/    # 厂商 CMSIS + HAL
+├── EIDE/       # IDE 工程（本仓库使用 EIDE）
+└── README.md
+```
+
+`Core/`、`Drivers/` 由厂商工具生成，不要手改；新增范例时复制一个现有范例的 `app/`、`bsp/`、`port/` 三层即可。
+
+## 作为新工程模板
+
+复制 `py32f002b_start_kit/` 中的 `app/`、`bsp/`、`port/` 到新工程，按目标板重写：
+
+1. `port/mcu_cmsis.h` 换成目标器件的 CMSIS 头；
+2. `bsp/board.*` 换成目标板的资源与 HAL 回调；
+3. `app/application.*` 修改事件号、载荷与 handler；
+4. 在 1ms 中断里调用 `timer::OnMilliSecondTick()`；
+5. 工程 include 路径加入：仓库根目录、`app/`、`bsp/`、`port/`。
+
+详细规则与反模式见 [SKILL.md](../.github/skills/mcu-baremetal-event-loop/SKILL.md)。

@@ -1,6 +1,6 @@
 ---
 name: mcu-baremetal-event-loop
-description: '编写或改造裸机 MCU（Cortex-M / STM32 / PY32 / 嵌入式 C++）代码时使用本仓库（queue.hpp、stream_buffer.hpp、timers.hpp、irq_lock.hpp）已有的工程模式：中断只投递事件、由 Application 的事件循环统一派发、BSP 层 Board 统一管理板级资源、静态内存、irq_lock 临界区、1ms 软件定时器。Use when adding peripherals, events, timers, UART protocols, drivers, BSP/board ports, or porting this library into a new bare-metal project, and generate code that follows these patterns instead of inventing new ones.'
+description: '编写或改造裸机 MCU（Cortex-M / STM32 / PY32 / 嵌入式 C++）代码时使用本仓库（queue.hpp、stream_buffer.hpp、timers.hpp、irq_lock.hpp）已有的工程模式：中断只投递事件、由 Application 的事件循环统一派发、BSP 层 Board 统一管理板级资源、静态内存、irq_lock 临界区、1ms 软件定时器。新建工程、换板、生成工程骨架时，以仓库自带范例 examples/py32f002b_start_kit 为模板复制 app/bsp/port 三层再替换实现。Use when adding peripherals, events, timers, UART protocols, drivers, BSP/board ports, scaffolding a new bare-metal project, or porting this library into an existing one, and generate code that follows these patterns instead of inventing new ones.'
 argument-hint: '要新增的外设 / 事件 / 定时任务，例如"加一个按键长按事件"'
 ---
 
@@ -8,7 +8,7 @@ argument-hint: '要新增的外设 / 事件 / 定时任务，例如"加一个按
 
 本仓库是 header-only 的 C++17 工具库，配套一套固定的工程骨架。**只要工程引用了本仓库的头文件，新增代码就必须沿用下面的模式**，不要引入 RTOS、动态内存或另一套事件机制。
 
-仓库自带一个可直接编译烧录的完整范例 [`examples/py32f002b_start_kit/`](../../../examples/py32f002b_start_kit/README.md)，包含 1ms tick 接入、UART 中断接收、`Board` BSP 单例和 `Application` 事件循环的完整写法，可作为实现参考。注意其中的 `Board` / `Serial` 是**某块板子的 BSP 产物**，换板时仍要按本文契约重写，不要直接复制。
+仓库自带一个可直接编译烧录的完整范例 [`examples/py32f002b_start_kit/`](../../../examples/py32f002b_start_kit/README.md)，新建工程或换板时以它为模板（见「用范例生成工程骨架」）。注意其中的 `Board` / `Serial` 是**某块板子的 BSP 产物**，换板时仍要按本文契约重写，不要直接复制。
 
 ## 何时使用
 
@@ -16,6 +16,32 @@ argument-hint: '要新增的外设 / 事件 / 定时任务，例如"加一个按
 - 要新增外设、事件、定时任务、串口协议处理
 - 要把厂商 HAL（CubeMX、PY32 HAL 等）工程改造成本模式
 - 要把本仓库移植到新的 MCU
+- **要新建工程 / 换一块板子 / 从零搭框架** —— 直接以仓库范例为模板生成，见下一节
+
+## 用范例生成工程骨架
+
+仓库自带一个可直接编译烧录的完整范例：`examples/py32f002b_start_kit/`（PY32F002Bx5 + USART1 115200）。当用户要求"新建工程 / 换板 / 搭框架"时，**以它为模板生成目录结构**，不要凭空发明：
+
+```
+<project>/
+├── app/            # 从范例复制：Application 单例、事件号、handler
+├── bsp/            # 从范例复制：Board 单例、驱动、HAL 回调转发
+├── port/           # 从范例复制：mcu_cmsis.h（换成目标器件的 CMSIS 头）
+├── Core/           # 厂商工具生成：时钟、外设初始化、中断入口
+├── Drivers/        # 厂商工具生成：CMSIS + HAL
+└── <IDE 工程目录>  # EIDE / Keil / Makefile 等
+```
+
+生成步骤：
+
+1. 复制 `examples/py32f002b_start_kit/` 的 `app/`、`bsp/`、`port/` 三个目录（**不要复制** `Core/`、`Drivers/`、`EIDE/`，它们必须由目标 MCU 的厂商工具生成）。
+2. 替换 `port/mcu_cmsis.h` 的器件头；确认平台提供 `__get_PRIMASK` / `__disable_irq` / `__set_PRIMASK`，缺失时在该头里补齐转接。
+3. 按目标板重写 `bsp/board.*` 与驱动（串口、按键…），保持 `Board` 单例与"读 / 写 / 注册通知"契约。
+4. 修改 `app/application.*` 的事件号、`QueueItem` 载荷与 handler。
+5. 在 1ms 中断里调用 `timer::OnMilliSecondTick()`。
+6. 工程配置：include 路径加入 **仓库根目录** + `app/` + `bsp/` + `port/`；仓库目录只加 include，不要加入源目录扫描。
+
+生成的代码必须同时满足下面的铁律、分层与命名约定；范例只是骨架，业务逻辑要按需求重新实现。
 
 ## 三条铁律
 

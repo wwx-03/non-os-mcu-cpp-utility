@@ -7,6 +7,8 @@
 
 #include "stream_buffer.hpp"
 
+// BSP 驱动：中断接收 + stream_buffer 缓冲 + 非阻塞发送。
+// 对外只提供"读 / 写 / 注册通知"三种能力，具体实现按目标板裁剪。
 template <size_t kRxSize, size_t kTxSize>
 class Serial {
 public:

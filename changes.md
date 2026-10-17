@@ -46,3 +46,12 @@
 ### 修改
 - `README.md`：新增「范例工程」一节与目录结构说明；补充"只加 include 路径、不要加 srcDirs"的接入提示。
 - `SKILL.md`：补充范例工程入口，说明其 BSP 实现仅作参考、换板仍按契约重写；补充 include 路径与 `srcDirs` 的区别。
+
+## 0007 — 2026-10-17
+
+### 修改
+- 范例工程目录对齐 `SKILL.md` 的分层：`main/` 拆分为 `app/`（Application）、`bsp/`（Board + 串口驱动）、`port/`（`mcu_cmsis.h`），EIDE 的 `srcDirs` / `incList` 同步调整。
+- 新增 `examples/README.md`：范例索引、目录约定、"作为新工程模板"的步骤。
+- `SKILL.md` 新增「用范例生成工程骨架」：新建工程/换板时以 `examples/py32f002b_start_kit` 为模板复制 `app/`、`bsp/`、`port/` 三层，`Core/`、`Drivers/` 交由厂商工具生成；`description` 补充脚手架相关触发词。
+- 范例与顶层 README 同步更新目录树、分层说明与代码导读路径。
+- 范例关键文件补充角色注释（`app/application.hpp`、`bsp/board.hpp`、`bsp/serial.hpp`、`port/mcu_cmsis.h`），明确各层职责。
