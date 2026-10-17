@@ -28,3 +28,9 @@
 - `.github/skills/mcu-baremetal-event-loop/`：Agent Skill，约定引入本仓库后必须沿用的工程模式。
   - `SKILL.md`：分层与依赖方向、三条铁律（中断只投递、静态内存、`irq_lock`）、`Application` 事件循环与投递链路、`Board`（BSP）板级资源契约、单例约定（`Application` / `Board` 只允许 `GetInstance()`）、API 速查、新增功能的标准流程、命名风格与反模式对照表。
   - `references/adapter-templates.md`：`mcu_cmsis.h`、tick 接入、`Board` 契约、`Application` 事件循环骨架、电平事件位图、队列容量与溢出策略。`Serial` / `Timer` 只作为接口命名示意，不提供实现。
+
+## 0005 — 2026-10-17
+
+### 修改
+- `SKILL.md` / `references/adapter-templates.md`：中断原语的移植方式改为**在 `mcu_cmsis.h` 中补齐 `__get_PRIMASK` / `__disable_irq` / `__set_PRIMASK` 的同名转接**，不再建议修改 `irq_lock.hpp`，保证 `utility` 层跨平台不分叉。
+- 删除"本工程已有一份 BSP 实现"这类依赖本工程范例的表述；改为平台无关的「板级驱动最小契约」（读 / 写 / 注册通知），并给出仅含声明的接口示意。

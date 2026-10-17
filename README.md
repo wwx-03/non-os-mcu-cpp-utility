@@ -30,6 +30,8 @@
 #include "py32f0xx.h"   // 换成你的器件头，例如 "stm32f1xx.h"
 ```
 
+如果器件头里没有 `__get_PRIMASK` / `__disable_irq` / `__set_PRIMASK`，**不要改 `irq_lock.hpp`**，直接在这个头里补齐同名转接（参见 [SKILL.md](./.github/skills/mcu-baremetal-event-loop/SKILL.md) 的"移植三步"）。
+
 ### 3. 接入 1ms tick
 
 在任意 1ms 中断里调用一次 `timer::OnMilliSecondTick()`：

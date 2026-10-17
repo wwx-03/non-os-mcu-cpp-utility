@@ -1,6 +1,6 @@
 # 适配层与骨架模板
 
-本文件只给**骨架与契约**：`Serial`、`Timer` 这类驱动实现属于具体板子的 BSP，本仓库不提供，也不建议照抄。换板时按新硬件与 HAL 能力重写，保持接口语义即可。
+本文件只给**骨架与契约**：`Serial`、`Timer` 这类驱动实现属于具体板子的 BSP，本仓库不提供实现，按 §3.3 的最小契约在各板 BSP 中自行实现即可。
 
 ## 1. 移植点：mcu_cmsis.h
 
@@ -10,17 +10,21 @@
 #include "py32f0xx.h"   // 换 MCU 时只改这一行，例如 "stm32f1xx.h"
 ```
 
-`irq_lock.hpp` 只依赖这个头。若目标架构没有 `__get_PRIMASK/__disable_irq/__set_PRIMASK`，在 `irq_lock.hpp` 内部改写实现，保持 RAII 接口不变：
+`irq_lock.hpp` 只依赖这个头。若目标平台没有 `__get_PRIMASK` / `__disable_irq` / `__set_PRIMASK`（非 CMSIS 架构，或厂商头未提供），**不要改 `irq_lock.hpp`**，在 `mcu_cmsis.h` 里补同名转接函数即可：
 
 ```cpp
-class irq_lock {
-public:
-	irq_lock() { /* 保存并关闭全局中断 */ }
-	~irq_lock() { /* 恢复 */ }
-	irq_lock(const irq_lock &) = delete;
-	irq_lock &operator=(const irq_lock &) = delete;
-};
+// mcu_cmsis.h
+#pragma once
+
+#include "xxx_device.h"
+
+// 目标平台没有 CMSIS 风格内建函数时，在这里补齐同名转接
+static inline uint32_t __get_PRIMASK() { return xxx_get_irq_state(); }
+static inline void __disable_irq() { xxx_disable_irq(); }
+static inline void __set_PRIMASK(uint32_t state) { xxx_restore_irq(state); }
 ```
+
+把这三个函数映射到平台自己的原语即可（RISC-V 用 `mstatus`/`mie`，AVR 用 `SREG`，等等）。`irq_lock.hpp` 的 RAII 接口保持不变，`utility` 层不需要为任何平台分叉。
 
 ## 2. tick 接入（1ms）
 
@@ -133,6 +137,31 @@ extern "C" void HAL_GPIO_EXTI_Callback(uint16_t pin)
 - 回调链上任何一层都不得阻塞、不得解析协议、不得直接调用业务函数。
 - 板级驱动（串口、按键、LED…）在收到数据时调用注册的通知回调，参数只带"字节数 / 标识"这类信息。
 - 应用层通过 `Board` 获取资源，不 `#include` 厂商 HAL 头，也不直接操作 `huart`。
+
+### 3.3 板级驱动最小契约
+
+BSP 里的驱动（串口、按键、传感器…）不需要与本仓库保持相同的类结构，只要能提供下面三种能力，`Application` 就能按同一模式使用：
+
+| 能力 | 语义 |
+|---|---|
+| 读 | 从接收缓冲取走数据，返回实际字节数；由主循环调用，数据不足时返回 0 |
+| 写 | 启动一次发送后立即返回；不得阻塞调用者，忙时返回 0 或自己排队 |
+| 注册通知 | 提供 `(回调, ctx)` 注册；在中断里只回调"有数据 / 状态变化"，不解析内容 |
+
+接口形态示意（**只有声明，实现由各板 BSP 完成**）：
+
+```cpp
+class Uart {
+public:
+	using data_callback_t = void (*)(size_t size, void *ctx);
+
+	void OnData(data_callback_t cb, void *ctx);    // 中断里调用 cb
+	size_t Read(void *dest, size_t size);          // 主循环调用
+	size_t Write(const void *src, size_t size);    // 非阻塞
+};
+```
+
+类名、是否用模板、缓冲大小、是否用 DMA，全部由这块板子决定；只要语义一致，`Application` 的写法不变。
 
 ## 4. Application：事件循环骨架
 

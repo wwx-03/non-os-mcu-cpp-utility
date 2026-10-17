@@ -39,7 +39,20 @@ app/      Application —— 事件循环唯一实现位置
 ## 移植三步
 
 1. 提供 `mcu_cmsis.h`，内容就是所选器件的 CMSIS 头，例如 `#include "py32f0xx.h"` 或 `#include "stm32f1xx.h"`。
-2. 保证 `irq_lock` 可用：Cortex-M 用 `PRIMASK`（仓库现状）；其它架构只改 `irq_lock.hpp` 内部，接口不变。
+2. 保证 `irq_lock` 可用：Cortex-M 直接可用（仓库现状就是 `PRIMASK`）。目标器件头里没有 `__get_PRIMASK` / `__disable_irq` / `__set_PRIMASK` 时，**不要改 `irq_lock.hpp`**，而是在 `mcu_cmsis.h` 里转接到该平台的中断控制原语：
+
+   ```cpp
+   // mcu_cmsis.h
+   #pragma once
+
+   #include "xxx_device.h"
+
+   // 厂商头没有 CMSIS 风格内建函数时，在这里补齐同名转接
+   static inline uint32_t __get_PRIMASK() { return xxx_get_irq_state(); }
+   static inline void __disable_irq() { xxx_disable_irq(); }
+   static inline void __set_PRIMASK(uint32_t state) { xxx_restore_irq(state); }
+   ```
+
 3. 把 tick 接进来：在 1ms 中断里调用 `timer::OnMilliSecondTick()`（SysTick 或 TIM 均可）。
 
 ## Application：事件循环与投递
@@ -119,7 +132,7 @@ private:
 
 **中断回调契约**：驱动在中断里发现"有新数据/状态变化"时，只调用上层注册的通知回调（带上字节数或标志），不解析内容；上层回调再把结果 `Post` 成事件。
 
-`Serial`、`Timer` 这类驱动属于 BSP，**本仓库不提供、也不要求照抄**：本工程里的实现只是"这一块板子如何使用 HAL"的产物。换板时按新硬件和 HAL 能力重新实现，只要对外保持"读 / 写 / 注册通知"的语义即可。
+`Serial`、`Timer` 这类驱动属于 BSP，**本仓库不提供实现**。每块板子按自己的硬件与 HAL 能力去写，对外只需满足三条最小契约：非阻塞读取（取走缓冲数据）、非阻塞写入（不卡住调用者）、注册通知（有数据或状态变化时回调，由上层转成事件）。这样换板时只替换 BSP，应用层和 `utility` 都不用动。
 
 ## API 速查
 
