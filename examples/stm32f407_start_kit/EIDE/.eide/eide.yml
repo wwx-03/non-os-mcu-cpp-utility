@@ -7,6 +7,7 @@ srcDirs:
   - ../app
   - ../bsp
   - ../port
+  - ../devices
   - ../../..
 virtualFolder:
   name: <virtual_root>
@@ -78,6 +79,7 @@ targets:
         - ../bsp
         - ../../..
         - ../port
+        - ../devices
       libList: []
     excludeList:
       - ../../../examples

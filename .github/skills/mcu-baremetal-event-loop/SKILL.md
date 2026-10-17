@@ -33,6 +33,7 @@ argument-hint: '要新增的外设 / 事件 / 定时任务，例如"加一个按
 <project>/
 ├── app/            # 从范例复制：Application 单例、事件号、handler
 ├── bsp/            # 从范例复制：Board 单例、驱动、HAL 回调转发
+├── devices/        # 从范例复制：与 MCU 无关的器件抽象（不 include 任何厂商头）
 ├── port/           # 从范例复制：mcu_cmsis.h（换成目标器件的 CMSIS 头）
 ├── Core/           # 厂商工具生成：时钟、外设初始化、中断入口
 ├── Drivers/        # 厂商工具生成：CMSIS + HAL
@@ -42,9 +43,9 @@ argument-hint: '要新增的外设 / 事件 / 定时任务，例如"加一个按
 
 生成步骤：
 
-1. 复制对应范例的 `app/`、`bsp/`、`port/` 三个目录（**不要复制** `Core/`、`Drivers/`、`EIDE/`，它们必须由目标 MCU 的厂商工具生成）。
+1. 复制对应范例的 `app/`、`bsp/`、`devices/`、`port/` 四个目录（**不要复制** `Core/`、`Drivers/`、`EIDE/`，它们必须由目标 MCU 的厂商工具生成）。
 2. 替换 `port/mcu_cmsis.h` 的器件头；确认平台提供 `__get_PRIMASK` / `__disable_irq` / `__set_PRIMASK`，缺失时在该头里补齐转接。
-3. 按目标板重写 `bsp/board.*` 与驱动（串口、按键…），保持 `Board` 单例与"读 / 写 / 注册通知"契约。范例里的 `usart.h` / `iwdg.h` 是 PY32F002B 的厂商文件，换板时换成新工程的初始化头；目标工程没有 IWDG 时删掉 `RefreshWatchdog()` 与喂狗定时器。
+3. 按目标板重写 `bsp/board.*` 与驱动（串口、按键、LED…），保持 `Board` 单例与"读 / 写 / 注册通知"契约；`devices/` 只保留与 MCU 无关的抽象，板级细节一律留在 BSP。范例里的 `usart.h` / `iwdg.h` 是厂商文件，换板时换成新工程的初始化头；目标工程没有 IWDG 时删掉 `RefreshWatchdog()` 与喂狗定时器。
 4. 修改 `app/application.*` 的事件号、`QueueItem` 载荷与 handler。
 5. 在 1ms 中断里调用 `timer::OnMilliSecondTick()`。
 6. 工程配置：**先确认工程原有工具链并沿用**（Keil / CubeMX 导入的 MDK-ARM 工程用 AC6，GCC 工程用 GCC），再按下面「EIDE 工程配置」设置 `srcDirs` / `incList` / C++17 选项与链接参数，改完必须用该工具链实际编译一次。
@@ -261,11 +262,21 @@ core/     startup、链接脚本、时钟初始化（厂商生成，只读）
 drivers/  厂商 HAL（只读）
 port/     mcu_cmsis.h —— 唯一的 MCU 依赖点
 utility/  本仓库：queue / stream_buffer / timers / irq_lock（不含 MCU 类型）
+devices/  器件抽象：Led、按键、传感器……只描述行为，**不含任何厂商头**
 bsp/      板级支持包：Board —— 板级资源与 HAL 回调的唯一入口，按板子实现
 app/      Application —— 事件循环唯一实现位置
 ```
 
-依赖方向只能是 `app → bsp → utility → port → CMSIS`：应用层只认识 `Board` 暴露的接口，绝不直接 `#include` 厂商 HAL 头；`utility` 不认识 MCU。
+依赖方向只能是：
+
+```
+app → bsp → devices → utility → port → CMSIS
+```
+
+- 应用层只认识 `Board` 暴露的接口，绝不直接 `#include` 厂商 HAL 头；
+- `devices/` 只依赖 `utility/` 与标准库，**一行 HAL 都不能出现**；
+- 板级细节（引脚、极性、外设句柄、DMA 能力）一律留在 `bsp/`；
+- `utility/` 不认识 MCU。
 
 **本仓库不提供 `Serial` / `Timer` 这类具体驱动实现。** 每块板子的串口数量、DMA 能力、HAL 版本都不同，BSP 自己实现即可；需要复用的是下面的骨架与约束，不是某份实现代码。
 
@@ -369,6 +380,85 @@ private:
 
 `Serial`、`Timer` 这类驱动属于 BSP，**本仓库不提供实现**。每块板子按自己的硬件与 HAL 能力去写，对外只需满足三条最小契约：非阻塞读取（取走缓冲数据）、非阻塞写入（不卡住调用者）、注册通知（有数据或状态变化时回调，由上层转成事件）。这样换板时只替换 BSP，应用层和 `utility` 都不用动。
 
+## devices 层：器件抽象
+
+`devices/` 回答"**这个器件是什么**"（行为与语义），`bsp/` 回答"**它在这块板上怎么接**"（引脚、极性、总线、初始化）。
+
+### 放什么
+
+- 只有行为、没有硬件细节的器件模型：`Led`、`Button`、`Buzzer`、传感器量程换算、按键消抖状态机；
+- 多种实现共享的语义：`GpioLed`（直连 GPIO）、`PwmLed`（调光）、`I2cExpanderLed`（端口扩展）。
+
+### 不放什么
+
+- 任何厂商头文件（`stm32f4xx_hal.h`、`py32f0xx_hal.h`…），也不 include `mcu_cmsis.h`；
+- 引脚号、GPIO 端口、AF 编号、器件 I2C 地址——这些是板级事实；
+- 初始化代码（时钟使能、`HAL_GPIO_Init`、总线初始化）。
+
+### 写法：NVI（非虚接口）
+
+对外方法非虚、由基类维护不变量；派生类只实现最小的硬件钩子：
+
+```cpp
+// devices/led.hpp
+class Led {
+public:
+	void SetState(bool state) {
+		state_ = state;
+		SetIo(state_);
+	}
+
+	void Toggle() { SetState(!state_); }
+	bool GetState() const { return state_; }
+
+protected:
+	~Led() = default;   // 实例都是静态对象，不会通过基类 delete
+	bool state_ = false;
+
+	virtual void SetIo(bool on) = 0;   // on == true 表示"点亮"
+};
+```
+
+```cpp
+// bsp/gpio_led.hpp
+class GpioLed final : public Led {
+public:
+	GpioLed(GPIO_TypeDef *port, uint16_t pin, bool active_high = true)
+		: port_(port), pin_(pin), active_high_(active_high) {}
+
+private:
+	GPIO_TypeDef *port_;
+	uint16_t pin_;
+	const bool active_high_;
+
+	void SetIo(bool on) override {
+		const GPIO_PinState level = (on == active_high_) ? GPIO_PIN_SET : GPIO_PIN_RESET;
+		HAL_GPIO_WritePin(port_, pin_, level);
+	}
+};
+```
+
+### 什么时候不该用虚接口
+
+只有一种实现、也不需要 PC 端 mock 时，vptr + vtable 是纯开销。此时把硬件原语注入即可（零开销，见「反模式与正确做法」）：`led` 持有 `void (*write)(bool, void*)`，由 BSP 传入静态函数。
+
+判断标准：**需要运行时替换实现 / 要在 PC 上跑单测** → 虚接口；否则函数指针或模板 policy。
+
+### 实例放哪、何时构造
+
+- 一律静态对象：`Board` 的成员，或 `board.cpp` 里命名空间作用域的静态对象；**禁止 `new`**；
+- **不要用函数内 `static`**：C++11 会插入 `__cxa_guard_acquire/release`，每次访问都判断；更严重的是**首次访问若发生在 ISR 里，就等于在中断里做外设初始化**；
+- 构造/析构里不要碰硬件：由 `Board` 构造先使能时钟、`HAL_GPIO_Init`，再 `SetState(false)` 确定初始电平；
+- 析构里**不要** `HAL_*_DeInit`：静态对象在裸机上永不析构，这段代码只会拖入 `__cxa_atexit` 并白占 flash。
+
+### 命名
+
+- 接口按行为命名：`Led`、`Button`、`Imu`（不加 `I` 前缀，也不加 `Io` 前缀）；
+- 实现按差异命名：`GpioLed`、`PwmLed`、`SoftI2cButton`；目录已经表明它是 BSP，不必再加 `Bsp` 前缀；
+- 文件名与类名对应：`devices/led.hpp` → `Led`，`bsp/gpio_led.hpp` → `GpioLed`。
+
+`Board` 只暴露基类：`Led *GetLed(size_t index)`，应用层拿不到 `GpioLed`，也就拿不到 HAL 类型。
+
 ## API 速查
 
 | 组件 | 签名 | 说明 |
@@ -383,7 +473,7 @@ private:
 
 ## 生成新功能的标准流程
 
-1. **需要新资源**：在 `Board` 增加获取接口，并在该板 BSP 中完成 HAL 初始化与回调转发；应用层不接触 HAL 句柄。
+1. **需要新资源**：在 `Board` 增加获取接口，并在该板 BSP 中完成 HAL 初始化与回调转发；应用层不接触 HAL 句柄。器件行为能在 `devices/` 描述的（LED、按键…）先抽象，再由 BSP 提供实现。
 2. **定事件**：在 `Application` 里加 `static constexpr uint32_t EVT_XXX`。带载荷的走 `queue`，纯电平/标志类事件用 `volatile` 位图（见模板）。
 3. **定载荷**：在 `QueueItem` 的 `union` 里加 POD 成员，优先 ≤ 8 字节，避免深拷贝。
 4. **写投递函数**：`PostXxx()` 只构造 `QueueItem` 并 `push`，供 BSP 回调在中断里调用。
@@ -394,7 +484,7 @@ private:
 ## 代码风格
 
 - `utility` 层：类名 snake_case（`timer`、`queue`、`stream_buffer`、`irq_lock`），方法 snake_case，成员后置下划线。
-- `app` / `bsp` 层：类名 PascalCase（`Application`、`Board`），方法 PascalCase（贴合 ST HAL 风格），成员后置下划线。
+- `app` / `bsp` / `devices` 层：类名 PascalCase（`Application`、`Board`、`Led`），方法 PascalCase（贴合 ST HAL 风格），成员后置下划线；文件名 snake_case（`gpio_led.hpp`）。
 - 缩进用 Tab，K&R 花括号，`#pragma once`，注释用中文且只写必要的。
 - 回调统一用无捕获 lambda：`+[](void *ctx) { ... }`，`ctx` 传 `this` 后 `static_cast` 回来。
 
@@ -419,6 +509,10 @@ private:
 | 从 Keil / CubeMX(MDK-ARM) 导入的工程把 EIDE 工具链改成 GCC（或反向） | 沿用原工具链：AC6 用 `../MDK-ARM/startup_*.s` + EIDE 生成的 `.sct`，GCC 才用 CMSIS gcc 启动文件和 `.ld` |
 | `<uAC6>1</uAC6>` 写进 `<TargetCommonOption>` | 必须写在 `<Target>` 下（与 `<pCCUsed>` 同级），否则 µVision 继续用 AC5 |
 | 只改 EIDE 不管 `MDK-ARM/*.uvprojx` | Keil 工程也要加 `app/`、`bsp/`、`port/` 源文件与 include 路径，否则用户用 Keil 打开直接编译失败 |
+| `devices/` 里 include 厂商 HAL、写死引脚号 / 极性 | `devices/` 只描述器件行为；引脚、极性、初始化全部留在 `bsp/` |
+| 在驱动构造里 `HAL_GPIO_Init`、在析构里 `HAL_GPIO_DeInit` | 初始化归 `Board`（先使能时钟再配引脚），驱动只读写电平；静态对象永不析构，DeInit 只会拖入 `__cxa_atexit` |
+| `Board::GetXxx()` 内用函数内 `static` 首次构造外设 | 用命名空间作用域 / `Board` 成员静态对象，在开中断前完成构造（避免 `__cxa_guard` 与 ISR 内初始化） |
+| 为只有一种实现的器件引入虚基类 | 只有需要运行时替换或 PC 端 mock 才用虚接口，否则用函数指针 / 模板 policy 注入 |
 | ISR 里触发单例首次构造 | 在开中断前完成所有单例初始化 |
 
 ## 完整模板

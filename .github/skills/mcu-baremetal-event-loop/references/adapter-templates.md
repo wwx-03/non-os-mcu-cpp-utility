@@ -400,12 +400,83 @@ private:
 - [ ] 所有共享变量都有 `irq_lock` 或单写者保证
 - [ ] 没有新增动态内存
 - [ ] 没有把其它板子的 `Serial` / `Timer` 实现直接搬过来
+- [ ] `devices/` 里没有厂商 HAL 头、没有引脚号 / 极性等板级细节
+- [ ] 器件对象是静态对象（`Board` 成员或命名空间作用域静态），没有 `new`、没有函数内 `static` 惰性构造
+- [ ] 驱动构造/析构里没有 `HAL_GPIO_Init` / `HAL_GPIO_DeInit`（初始化归 `Board`，静态对象永不析构）
 - [ ] HAL 回调名与所用 API 匹配（`HAL_UART_Receive_IT` → `HAL_UART_RxCpltCallback`）
 - [ ] 厂商初始化里已启动 IWDG 时，有周期喂狗（`timer` 投递事件 → `Board::RefreshWatchdog()`）
 - [ ] EIDE `srcDirs` 含仓库根目录时已用 `excludeList` 排除 `examples/**`
 - [ ] 工程工具链与来源一致（Keil/MDK-ARM → AC6 + `.sct`；GCC → `.ld`），没有擅自切换
-- [ ] Keil 工程同步：`<Target>` 下有 `<pCCUsed>` + `<uAC6>1</uAC6>`，`app/`、`bsp/` 的 `.cpp` 以 `FileType 8` 入组，`IncludePath` 含 `../app;../bsp;../port;../non-os-mcu-cpp-utility`
+- [ ] Keil 工程同步：`<Target>` 下有 `<pCCUsed>` + `<uAC6>1</uAC6>`，`app/`、`bsp/` 的 `.cpp` 以 `FileType 8` 入组，`IncludePath` 含 `../app;../bsp;../port;../devices;../non-os-mcu-cpp-utility`
 - [ ] 用工程实际工具链（AC6 或 GCC）以 C++17 + `-fno-exceptions -fno-rtti` 编译通过
+
+## 8b. devices 层骨架
+
+`devices/` 只放与 MCU 无关的器件行为；实现落在 `bsp/`，由 `Board` 暴露基类指针。
+
+```cpp
+// devices/led.hpp —— 不含任何厂商头
+class Led {
+public:
+	void SetState(bool state) {
+		state_ = state;
+		SetIo(state_);
+	}
+	void Toggle() { SetState(!state_); }
+	bool GetState() const { return state_; }
+
+protected:
+	~Led() = default;          // 静态对象，不会通过基类 delete
+	bool state_ = false;
+	virtual void SetIo(bool on) = 0;
+};
+```
+
+```cpp
+// bsp/gpio_led.hpp
+class GpioLed final : public Led {
+public:
+	GpioLed(GPIO_TypeDef *port, uint16_t pin, bool active_high = true)
+		: port_(port), pin_(pin), active_high_(active_high) {}
+
+private:
+	GPIO_TypeDef *port_;
+	uint16_t pin_;
+	const bool active_high_;
+
+	void SetIo(bool on) override {
+		HAL_GPIO_WritePin(port_, pin_, (on == active_high_) ? GPIO_PIN_SET : GPIO_PIN_RESET);
+	}
+};
+```
+
+```cpp
+// bsp/board.cpp —— 静态对象 + Board 内完成板级初始化
+namespace {
+GPIO_TypeDef *const RED_LED_PORT = GPIOF;   // GPIOx 是强制转换，不能用 constexpr
+constexpr uint16_t RED_LED_PIN = GPIO_PIN_9;
+GpioLed red_led(RED_LED_PORT, RED_LED_PIN, false);   // 无 __cxa_guard
+}
+
+Board::Board() {
+	__HAL_RCC_GPIOF_CLK_ENABLE();
+
+	GPIO_InitTypeDef init = {};
+	init.Mode = GPIO_MODE_OUTPUT_PP;
+	init.Pull = GPIO_NOPULL;
+	init.Speed = GPIO_SPEED_FREQ_LOW;
+	init.Pin = RED_LED_PIN;
+	HAL_GPIO_Init(RED_LED_PORT, &init);
+
+	red_led.SetState(false);    // 时钟与引脚就绪后再确定电平
+}
+```
+
+要点：
+
+- `GPIOx` 展开为 `((GPIO_TypeDef *)基址)`，**不是 C++ 常量表达式**，声明为 `GPIO_TypeDef *const`，写成 `constexpr` 会报 `must be initialized by a constant expression`。
+- 构造里只保存 `port/pin/polarity`，不写寄存器；初始电平在 `Board` 初始化完成后设置。
+- 引脚由 `Board` 初始化（CubeMX 若已配置该引脚，就不要重复 `HAL_GPIO_Init`）。
 
 ## 9. EIDE 工程配置模板
 

@@ -14,15 +14,17 @@
 | 芯片 | STM32F407ZGTx（144 pin，1 MB Flash / 128 KB SRAM） |
 | 时钟 | HSE 25 MHz → PLL 168 MHz |
 | 串口 | USART1：PA9 = TX，PA10 = RX，115200 8N1 |
+| LED | PF9（红）/ PF10（绿），低电平点亮，由 `Board` 初始化 |
 | 看门狗 | IWDG（LSI 32 kHz / 4 × 4095 ≈ 512 ms），事件循环每 100 ms 喂狗 |
-| 现象 | 上电后每秒输出 `seconds elapsed`；发送以 `\n` 结尾的数据会原样回显 |
+| 现象 | 上电后每秒输出 `Tick: <秒数>, dropped: <丢事件数>`，同时翻转红/绿 LED；发送以 `\n` 结尾的数据会原样回显 |
 
 ## 目录结构
 
 ```
 examples/stm32f407_start_kit/
 ├── app/         # 应用层：Application 单例与事件循环（唯一的业务入口）
-├── bsp/         # 板级支持包：Board 单例、HAL 回调转发、UART 驱动
+├── bsp/         # 板级支持包：Board 单例、HAL 回调转发、GPIO 驱动
+├── devices/     # 器件抽象：Led（不含任何厂商头）
 ├── port/        # mcu_cmsis.h：唯一的 MCU 依赖点
 ├── Core/        # CubeMX 生成的外设初始化与中断入口（main.c / *_it.c）
 ├── Drivers/     # CMSIS + STM32F4 HAL（只保留本范例用到的文件）
@@ -67,23 +69,25 @@ EIDE 首次构建时会根据 `eide.yml` 生成 `build/Debug/builder.params` 与
    - 另有一个 100 ms `timer` 投递 `WATCHDOG_REFRESH_EVENT`，在事件循环里喂 IWDG；
    - `Start()`：全工程唯一的事件循环，`pop` → `switch` → `HandleXxx()`。
 3. `bsp/board.cpp`
-   - `Board::GetInstance()` 单例，持有 UART 驱动对象，并暴露 `RefreshWatchdog()`；
+   - `Board::GetInstance()` 单例，持有 UART 驱动对象与两个 `GpioLed`，并暴露 `RefreshWatchdog()`；
+   - `Board` 构造函数里使能 GPIOF 时钟、`HAL_GPIO_Init` PF9/PF10，再确定初始电平；
    - `HAL_UART_RxCpltCallback` / `HAL_UART_ErrorCallback` 只把事件转给 `Serial`；
    - `HAL_IncTick` 里调用 `timer::OnMilliSecondTick()` —— 1ms tick 的唯一接入点。
-4. `bsp/serial.hpp`：1 字节中断接收 + `stream_buffer` + `HAL_UART_Transmit_IT` 非阻塞发送。
-5. `port/mcu_cmsis.h`：`#include "stm32f4xx.h"`，`irq_lock` 的唯一 MCU 依赖点。
+4. `bsp/gpio_led.hpp` / `devices/led.hpp`：`Led` 是 NVI 接口（`SetState`/`Toggle`/`GetState` 非虚，派生类只实现 `SetIo`），`GpioLed` 负责电平与极性；`devices/` 不含任何 HAL 头。
+5. `bsp/serial.hpp`：1 字节中断接收 + `stream_buffer` + `HAL_UART_Transmit_IT` 非阻塞发送，另有 `vsnprintf` 格式化输出重载。
+6. `port/mcu_cmsis.h`：`#include "stm32f4xx.h"`，`irq_lock` 的唯一 MCU 依赖点。
 
 ## 作为新工程模板
 
 **从 Keil / CubeMX 导入的工程**请以本目录为模板（GCC 工程用 `py32f002b_start_kit/`）：
 
-1. 复制 `app/`、`bsp/`、`port/` 三层；
+1. 复制 `app/`、`bsp/`、`devices/`、`port/` 四层；
 2. `Core/`、`Drivers/` 由 CubeMX 重新生成，不要复制（本目录只保留运行本范例必需的 HAL 模块，供直接编译验证）；
 3. `MDK-ARM/` 保留你自己的 `.uvprojx`，但要做三件事：
    - `<pCCUsed>` + `<uAC6>1</uAC6>` 放在 `<Target>` 下（不是 `<TargetCommonOption>` 里），否则 µVision 仍用 AC5；
-   - `IncludePath` 追加 `../app;../bsp;../port;../non-os-mcu-cpp-utility`；
+   - `IncludePath` 追加 `../app;../bsp;../port;../devices;../non-os-mcu-cpp-utility`；
    - `Groups` 里新增一个组，把 `../app/application.cpp`、`../bsp/board.cpp` 以 `FileType 8`（C++ Source）加入；
-4. `EIDE/.eide/eide.yml` 按本目录的 `AC6` 配置改写（`toolchain: AC6`、`useCustomScatterFile: false`），详见仓库 `SKILL.md` 的「EIDE 工程配置」。
+4. `EIDE/.eide/eide.yml` 按本目录的 `AC6` 配置改写（`toolchain: AC6`、`useCustomScatterFile: false`，`srcDirs`/`incList` 含 `../devices`），详见仓库 `SKILL.md` 的「EIDE 工程配置」。
 
 ## 注意
 

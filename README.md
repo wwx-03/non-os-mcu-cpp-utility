@@ -105,6 +105,7 @@ int main()
 - **Application**：全工程唯一的事件循环，也是唯一持有事件队列的地方。所有中断通过 `PostXxx()` 投递，`Start()` 里 `pop` 后按事件号派发到 handler。**必须用 `GetInstance()` 单例**。
 - **BSP（Board）**：全工程唯一接触 HAL 的地方，一块板子一份实现。负责持有 HAL 句柄、构造板级资源、独占并转发 HAL 回调；驱动只上报"有数据/有事件"，不解析协议。**同样是 `GetInstance()` 单例**，不允许改全局对象、工厂或依赖注入。
 - **驱动（Serial、Timer 等）**：属于具体板子的 BSP，本仓库**不提供**。换板时按新硬件与 HAL 能力重写，保持接口语义即可。
+- **器件抽象（devices）**：与 MCU 无关的行为模型（`Led`、`Button`…），只描述"是什么"，不碰引脚与 HAL；具体实现由 `bsp/` 继承并提供，`Board` 只暴露基类指针。
 
 新增外设、事件、定时任务时请沿用该模式，不要在一个工程里混用 RTOS、动态内存或另一套事件机制。完整的规则、反模式和代码模板见：
 
@@ -177,6 +178,7 @@ non-os-mcu-cpp-utility/
     └── stm32f407_start_kit/            # Keil AC6 模板（同时保留 .uvprojx 与 EIDE 工程）
         ├── app/
         ├── bsp/
+        ├── devices/
         ├── port/
         ├── Core/
         ├── Drivers/

@@ -81,3 +81,17 @@
 - `SKILL.md`「EIDE 工程配置」新增「工具链必须沿用工程现状」：明确禁止把 Keil 导入工程改成 GCC（或反向），并给出 AC6 / GCC 两套编译选项表与各自的验证命令。
 - `references/adapter-templates.md` §9 增加 AC6 版 `eide.yml` 模板与工具链一致性检查项；检查清单改为「用工程实际工具链验证」。
 - `examples/README.md`：范例索引补充工具链列，模板选择按工程来源拆分。
+
+## 0010 — 2026-10-17
+
+### 新增
+- `devices/` 层与 `Led` 抽象：`devices/led.hpp` 用 NVI 写法（`SetState`/`Toggle`/`GetState` 非虚，派生类只实现 `SetIo`），不依赖任何厂商头；`bsp/gpio_led.hpp` 提供 `GpioLed`，负责电平与极性。
+- `SKILL.md` 新增「devices 层：器件抽象」：放什么/不放什么、NVI 骨架、何时不该用虚接口、静态对象构造时机、命名约定；分层图与依赖方向更新为 `app → bsp → devices → utility → port → CMSIS`。
+- `references/adapter-templates.md` 新增 §8b「devices 层骨架」，检查清单补充 devices/HAL 隔离与静态构造项。
+- 范例 `stm32f407_start_kit` 同步 `devices/`、`bsp/gpio_led.hpp`、`Board::GetLed()`，EIDE `srcDirs`/`incList` 与 Keil `IncludePath` 增加 `../devices`。
+
+### 修改
+- `Board` 成为 LED 的唯一入口：`GetLed(index)` 返回 `Led *`；`Board` 构造函数使能 GPIO 时钟、`HAL_GPIO_Init` 引脚后再确定初始电平；LED 对象改为 `board.cpp` 中命名空间作用域的静态对象（无 `__cxa_guard`）。
+- 修正驱动职责：`GpioLed` 构造不再 `HAL_GPIO_Init`，析构删除 `HAL_GPIO_DeInit`（静态对象永不析构，只会拖入 `__cxa_atexit`）。
+- `Board` 的常量去掉保留标识符前缀：`_SERIAL1_RX_SIZE` → `SERIAL1_RX_SIZE`。
+- 应用层每秒翻转 LED 并输出 `Tick: <秒数>, dropped: <n>`；`Serial` 增加 `vsnprintf` 格式化发送重载，`Core/Src/retarget.c` 关闭 armlib 的 semihosting 依赖。

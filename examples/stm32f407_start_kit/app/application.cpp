@@ -88,8 +88,16 @@ void Application::HandleSerialReceived(const QueueItem &item) {
 void Application::HandleTimerElapsed() {
 	static uint32_t seconds = 0;
 	++seconds;
-	auto *serial = Board::GetInstance().GetSerial();
+
+	auto &board = Board::GetInstance();
+	auto *serial = board.GetSerial();
 	serial->Write("Tick: %lu, dropped: %lu\r\n", seconds, dropped_);
+
+	auto *red_led = board.GetLed(Board::RED_LED_INDEX);
+	red_led->Toggle();
+
+	auto *green_led = board.GetLed(Board::GREEN_LED_INDEX);
+	green_led->Toggle();
 }
 
 void Application::HandleWatchdogRefresh() {
