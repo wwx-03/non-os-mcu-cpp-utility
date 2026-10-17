@@ -1,0 +1,43 @@
+{
+    "folders": [
+        {
+            "path": "."
+        },
+        {
+            "path": ".."
+        },
+        {
+            "path": "../../.."
+        }
+    ],
+    "settings": {
+        "clangd.arguments": [
+            "--header-insertion=never"
+        ],
+        "C_Cpp.default.configurationProvider": "cl.eide",
+        "C_Cpp.errorSquiggles": "disabled",
+        "files.associations": {
+            "*.h": "c",
+            "*.c": "c",
+            "*.hxx": "cpp",
+            "*.hpp": "cpp",
+            "*.cpp": "cpp",
+            "*.cxx": "cpp",
+            "*.cc": "cpp"
+        },
+        "[yaml]": {
+            "editor.insertSpaces": true,
+            "editor.tabSize": 4,
+            "editor.autoIndent": "advanced"
+        }
+    },
+    "extensions": {
+        "recommendations": [
+            "cl.eide",
+            "redhat.vscode-yaml",
+            "marus25.cortex-debug",
+            "dan-c-underwood.arm",
+            "ms-vscode.vscode-serial-monitor"
+        ]
+    }
+}

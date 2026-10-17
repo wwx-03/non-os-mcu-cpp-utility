@@ -403,11 +403,15 @@ private:
 - [ ] HAL 回调名与所用 API 匹配（`HAL_UART_Receive_IT` → `HAL_UART_RxCpltCallback`）
 - [ ] 厂商初始化里已启动 IWDG 时，有周期喂狗（`timer` 投递事件 → `Board::RefreshWatchdog()`）
 - [ ] EIDE `srcDirs` 含仓库根目录时已用 `excludeList` 排除 `examples/**`
-- [ ] 用 `-Wall -Wextra -fno-exceptions -fno-rtti -std=c++17` 编译通过
+- [ ] 工程工具链与来源一致（Keil/MDK-ARM → AC6 + `.sct`；GCC → `.ld`），没有擅自切换
+- [ ] Keil 工程同步：`<Target>` 下有 `<pCCUsed>` + `<uAC6>1</uAC6>`，`app/`、`bsp/` 的 `.cpp` 以 `FileType 8` 入组，`IncludePath` 含 `../app;../bsp;../port;../non-os-mcu-cpp-utility`
+- [ ] 用工程实际工具链（AC6 或 GCC）以 C++17 + `-fno-exceptions -fno-rtti` 编译通过
 
 ## 9. EIDE 工程配置模板
 
-EIDE 工程目录固定为 `<project>/EIDE`，`.eide/eide.yml` 的关键字段如下（路径相对 `EIDE/`；范例位于 `examples/py32f002b_start_kit`，所以仓库根目录是 `../../..`，普通工程通常是 `../non-os-mcu-cpp-utility`）：
+EIDE 工程目录固定为 `<project>/EIDE`，`.eide/eide.yml` 的关键字段如下（路径相对 `EIDE/`；范例位于 `examples/py32f002b_start_kit`，所以仓库根目录是 `../../..`，普通工程通常是 `../non-os-mcu-cpp-utility`）。
+
+> **先选对工具链**：Keil / CubeMX 导入的 `MDK-ARM` 工程用 AC6 + EIDE 生成的 `.sct`；GCC 工程才用下面的 GCC 模板 + 厂商 `.ld`。不要把两者混用。
 
 ```yaml
 version: "4.1"
@@ -501,10 +505,77 @@ targets:
     uploader: pyOCD
 ```
 
+如果工程是从 Keil MDK / CubeMX 的 `MDK-ARM` 工程导入的，**不要用上面的 GCC 模板**，改用 AC6：
+
+```yaml
+srcDirs:
+  - ../app
+  - ../bsp
+  - ../port
+  - ../non-os-mcu-cpp-utility
+virtualFolder:
+  name: <virtual_root>
+  files: []
+  folders:
+    - name: Application
+      files: []
+      folders:
+        - name: EIDE
+          files:
+            - path: ../MDK-ARM/startup_stm32f407xx.s     # ARM 语法启动文件
+          folders: []
+        # … Core / Drivers 同上
+targets:
+  Debug:
+    cppPreprocessAttrs:
+      defineList: [USE_HAL_DRIVER, STM32F407xx]
+      incList:
+        - ../Core/Inc
+        - ../Drivers/STM32F4xx_HAL_Driver/Inc
+        - ../Drivers/CMSIS/Device/ST/STM32F4xx/Include
+        - ../Drivers/CMSIS/Include
+        - ../app
+        - ../bsp
+        - ../non-os-mcu-cpp-utility
+        - ../port
+    excludeList:
+      - ../non-os-mcu-cpp-utility/examples
+    toolchain: AC6
+    toolchainConfigMap:
+      AC6:
+        cpuType: Cortex-M4
+        floatingPointHardware: single
+        options:
+          asm-compiler:
+            $use: asm-auto
+          c/cpp-compiler:
+            CXX_FLAGS: -fno-exceptions -fno-rtti
+            language-c: c99
+            language-cpp: c++17
+            one-elf-section-per-function: true
+            optimization: level-2
+            plain-char-is-signed: true
+            warnings: ac5-like-warnings
+          linker:
+            misc-controls: --diag_suppress=L6329
+            output-format: elf
+        scatterFilePath: ""
+        storageLayout:            # 按芯片真实内存填写
+          RAM:
+            - { id: 1, isChecked: true, mem: { size: "0x20000", startAddr: "0x20000000" }, noInit: false, tag: IRAM }
+          ROM:
+            - { id: 1, isChecked: true, isStartup: true, mem: { size: "0x100000", startAddr: "0x08000000" }, tag: IROM }
+        useCustomScatterFile: false   # EIDE 按 storageLayout 生成 .sct
+    uploader: STLink
+```
+
 检查点：
 
+- **工具链与工程来源一致**：`MDK-ARM/*.uvprojx` 工程用 AC6 + `../MDK-ARM/startup_*.s` + `useCustomScatterFile: false`；GCC 工程用 GCC + CMSIS `Templates/gcc/startup_*.s` + 厂商 `.ld`（`useCustomScatterFile: true`）。
+- AC6 的 `CXX_FLAGS` 只能写 armclang 参数（`-fno-exceptions -fno-rtti`），不要混入 `--specs=nosys.specs`、`-Wl,...` 等 GCC 选项。
+- `storageLayout` 的 RAM/ROM 按芯片数据手册填写，构建后核对生成的 `.sct`。
 - `srcDirs` 放进仓库根目录时，**必须**同步排除 `examples/**`；否则范例的 `.cpp` 会被编译进当前工程。
 - `../port` 必须同时出现在 `incList`，否则 `irq_lock.hpp` 找不到 `mcu_cmsis.h`。
-- `language-cpp` 必须是 `c++17`；`no-exceptions` / `no-rtti` 必须打开。
-- `py32f002b_hal_conf.h` 打开的每个 HAL 模块都要在 `virtualFolder` 的 `Src` 列表里有对应 `.c`。
+- `language-cpp` 必须是 `c++17`；`-fno-exceptions -fno-rtti` 必须打开。
+- `py32f002b_hal_conf.h` / `stm32f4xx_hal_conf.h` 打开的每个 HAL 模块都要在 `virtualFolder` 的 `Src` 列表里有对应 `.c`。
 - `.vscode/tasks.json` 与 `uploadConfigMap` 的 ELF 路径要和 `outDir/<target>/<name>.elf` 一致。

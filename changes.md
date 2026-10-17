@@ -65,3 +65,19 @@
 - `SKILL.md` 新增「EIDE 工程配置」：`srcDirs` / `excludeList`、`incList`、C/C++ 标准、链接参数与改完后的编译验证命令；反模式表补充 HAL 回调名、IWDG、EIDE 扫描三条。
 - `references/adapter-templates.md`：tick 接入改为覆盖 `HAL_IncTick`（避免与厂商 `*_it.c` 里的 `SysTick_Handler` 重复定义）；检查清单补充回调名、IWDG 与 EIDE 排除项；新增 §9「EIDE 工程配置模板」。
 - `README.md`、`examples/README.md`、范例 `README.md` 同步 EIDE 配置与喂狗说明。
+
+## 0009 — 2026-10-17
+
+### 新增
+- `examples/stm32f407_start_kit/`：STM32F407ZGTx 范例，也是**从 Keil MDK 导入的工程模板**。
+  - 与 PY32 范例同一套 `app/` / `bsp/` / `port/` 分层与事件循环模式，工具链改为 Keil **AC6（armclang）**。
+  - 同时保留 `MDK-ARM/stm32f407_start_kit.uvprojx`（`uAC6=1`）与 `EIDE/`（`toolchain: AC6`、`useCustomScatterFile: false`），两套工程共用同一份源码。
+  - 附 `stm32f407_start_kit.ioc`，可用 CubeMX 重新生成 `Core/`、`Drivers/`；只保留范例用到的 HAL 模块以便直接编译。
+  - `Core/Src/retarget.c`：关闭 AC6 armlib 的 semihosting 依赖。
+- `SKILL.md` 新增「Keil MDK 工程配置（AC6）」：`<pCCUsed>` + `<uAC6>1</uAC6>` 必须写在 `<Target>` 下、C++ 源文件用 `FileType 8` 加组、`IncludePath` 追加 `app/bsp/port/仓库根目录`、`-fno-exceptions` 与 `v6Rtti`、以及用 `UV4 -b` 读 `n Error(s)` 的验证方法。
+- `SKILL.md`「用范例生成工程骨架」改为按工程来源选模板：Keil/MDK-ARM → `stm32f407_start_kit`，GCC/`.ld` → `py32f002b_start_kit`。
+
+### 修改
+- `SKILL.md`「EIDE 工程配置」新增「工具链必须沿用工程现状」：明确禁止把 Keil 导入工程改成 GCC（或反向），并给出 AC6 / GCC 两套编译选项表与各自的验证命令。
+- `references/adapter-templates.md` §9 增加 AC6 版 `eide.yml` 模板与工具链一致性检查项；检查清单改为「用工程实际工具链验证」。
+- `examples/README.md`：范例索引补充工具链列，模板选择按工程来源拆分。

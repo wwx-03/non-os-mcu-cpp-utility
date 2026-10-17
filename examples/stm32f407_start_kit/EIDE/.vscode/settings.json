@@ -1,0 +1,13 @@
+{
+    "C_Cpp.default.configurationProvider": "cl.eide",
+    "C_Cpp.errorSquiggles": "disabled",
+    "clangd.arguments": [
+        "--header-insertion=never"
+    ],
+    "files.associations": {
+        "*.h": "c",
+        "*.c": "c",
+        "*.hpp": "cpp",
+        "*.cpp": "cpp"
+    }
+}

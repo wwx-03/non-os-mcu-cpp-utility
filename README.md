@@ -83,13 +83,20 @@ int main()
 
 ## 范例工程
 
-[`examples/py32f002b_start_kit/`](./examples/py32f002b_start_kit/README.md) 是一个完整、可编译烧录的工程（PY32F002Bx5，USART1 115200 8N1），演示整套模式：
+仓库自带两个完整、可编译烧录的工程，除 MCU 外分别代表两种工具链：
+
+| 范例 | MCU | 工具链 / 工程 |
+|---|---|---|
+| [`examples/stm32f407_start_kit/`](./examples/stm32f407_start_kit/README.md) | STM32F407ZGTx | Keil **AC6（armclang）**：`MDK-ARM/*.uvprojx` + EIDE（`toolchain: AC6`） |
+| [`examples/py32f002b_start_kit/`](./examples/py32f002b_start_kit/README.md) | PY32F002Bx5 | **GCC**（arm-none-eabi）：EIDE + `.ld` 链接脚本 |
+
+两者演示同一套模式：
 
 - 1ms tick：`HAL_IncTick` → `timer::OnMilliSecondTick()`；
 - UART 中断接收 → `stream_buffer` → BSP 回调 → `queue` → `Application` 事件循环；
 - `Board` 单例作为 BSP，独占 HAL 句柄与 HAL 弱回调。
 
-范例直接引用本仓库根目录的头文件（EIDE `incList` 中的 `../../..`），不复制一份库代码，因此始终与仓库版本一致。目录按 `app/`（应用）、`bsp/`（板级）、`port/`（MCU 桥接）分层，可直接作为新工程的模板。
+范例直接引用本仓库根目录的头文件（EIDE `incList` 中的 `../../..`），不复制一份库代码，因此始终与仓库版本一致。目录按 `app/`（应用）、`bsp/`（板级）、`port/`（MCU 桥接）分层，可直接作为新工程的模板：Keil / MDK-ARM 导入的工程用 `stm32f407_start_kit`，GCC 工程用 `py32f002b_start_kit`。
 
 ## 工程模式
 
@@ -159,13 +166,23 @@ non-os-mcu-cpp-utility/
 │   └── references/adapter-templates.md
 └── examples/
     ├── README.md
-    └── py32f002b_start_kit/
+    ├── py32f002b_start_kit/            # GCC / EIDE 模板
+    │   ├── app/
+    │   ├── bsp/
+    │   ├── port/
+    │   ├── Core/
+    │   ├── Drivers/
+    │   ├── EIDE/
+    │   └── README.md
+    └── stm32f407_start_kit/            # Keil AC6 模板（同时保留 .uvprojx 与 EIDE 工程）
         ├── app/
         ├── bsp/
         ├── port/
         ├── Core/
         ├── Drivers/
+        ├── MDK-ARM/
         ├── EIDE/
+        ├── stm32f407_start_kit.ioc
         └── README.md
 ```
 

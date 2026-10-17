@@ -1,0 +1,13 @@
+##########################################################################################
+#                        Append Compiler Options For Source Files
+##########################################################################################
+
+# syntax:
+#   <your pattern>: <compiler options>
+# For get pattern syntax, please refer to: https://www.npmjs.com/package/micromatch
+
+version: "2.1"
+options:
+    stm32f407_start_kit:
+        files: {}
+        virtualPathFiles: {}

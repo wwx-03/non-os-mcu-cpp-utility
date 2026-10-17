@@ -1,0 +1,16 @@
+# EIDE build output
+/EIDE/build
+/EIDE/bin
+/EIDE/obj
+/EIDE/out
+/.eide/log
+/.eide.usr.ctx.json
+
+# Keil MDK build output
+/MDK-ARM/*/
+/MDK-ARM/*.dep
+/MDK-ARM/*.lst
+/MDK-ARM/*.bak
+/MDK-ARM/*.uvguix.*
+/MDK-ARM/RTE/
+/MDK-ARM/DebugConfig/
