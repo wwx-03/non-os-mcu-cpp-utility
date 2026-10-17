@@ -403,6 +403,7 @@ private:
 - [ ] `devices/` 里没有厂商 HAL 头、没有引脚号 / 极性等板级细节
 - [ ] 器件对象是静态对象（`Board` 成员或命名空间作用域静态），没有 `new`、没有函数内 `static` 惰性构造
 - [ ] 驱动构造/析构里没有 `HAL_GPIO_Init` / `HAL_GPIO_DeInit`（初始化归 `Board`，静态对象永不析构）
+- [ ] 器件基类构造函数里没有调用纯虚函数（初值采样放在 `Start()`，由 `Board` 在引脚配置后调用）
 - [ ] HAL 回调名与所用 API 匹配（`HAL_UART_Receive_IT` → `HAL_UART_RxCpltCallback`）
 - [ ] 厂商初始化里已启动 IWDG 时，有周期喂狗（`timer` 投递事件 → `Board::RefreshWatchdog()`）
 - [ ] EIDE `srcDirs` 含仓库根目录时已用 `excludeList` 排除 `examples/**`

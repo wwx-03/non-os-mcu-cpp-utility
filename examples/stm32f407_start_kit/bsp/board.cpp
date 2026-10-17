@@ -1,5 +1,6 @@
 #include "board.hpp"
 
+#include "gpio_button.hpp"
 #include "gpio_led.hpp"
 #include "iwdg.h"
 #include "usart.h"
@@ -13,9 +14,13 @@ constexpr uint16_t RED_LED_PIN = GPIO_PIN_9;
 GPIO_TypeDef *const GREEN_LED_PORT = GPIOF;
 constexpr uint16_t GREEN_LED_PIN = GPIO_PIN_10;
 
+GPIO_TypeDef *const BUTTON0_PORT = GPIOA;
+constexpr uint16_t BUTTON0_PIN = GPIO_PIN_0;
+
 // 命名空间作用域的静态对象：没有 __cxa_guard 守卫，且在 main() 之前构造
 GpioLed red_led(RED_LED_PORT, RED_LED_PIN, false);
 GpioLed green_led(GREEN_LED_PORT, GREEN_LED_PIN, false);
+GpioButton button0(BUTTON0_PORT, BUTTON0_PIN, true);   // 按下为高电平（WK_UP 风格）
 }
 
 Board::Board() {
@@ -32,9 +37,16 @@ Board::Board() {
 	init.Pin = GREEN_LED_PIN;
 	HAL_GPIO_Init(GREEN_LED_PORT, &init);
 
-	// 外设就绪后再确定初始电平，避免在时钟未使能时写寄存器
+	// PA0：按键输入，内部下拉（按下接 3.3V 时为高）
+	init.Mode = GPIO_MODE_INPUT;
+	init.Pull = GPIO_PULLDOWN;
+	init.Pin = BUTTON0_PIN;
+	HAL_GPIO_Init(BUTTON0_PORT, &init);
+
+	// 外设就绪后再确定初始电平 / 采样起点，避免在时钟未使能时写寄存器
 	red_led.SetState(false);
 	green_led.SetState(false);
+	button0.Start();
 }
 
 Led *Board::GetLed(const size_t index) {
@@ -43,6 +55,15 @@ Led *Board::GetLed(const size_t index) {
 		return &red_led;
 	case GREEN_LED_INDEX:
 		return &green_led;
+	default:
+		return nullptr;
+	}
+}
+
+Button *Board::GetButton(const size_t index) {
+	switch (index) {
+	case BUTTON0_INDEX:
+		return &button0;
 	default:
 		return nullptr;
 	}

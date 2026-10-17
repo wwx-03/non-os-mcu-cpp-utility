@@ -380,30 +380,27 @@ private:
 
 `Serial`、`Timer` 这类驱动属于 BSP，**本仓库不提供实现**。每块板子按自己的硬件与 HAL 能力去写，对外只需满足三条最小契约：非阻塞读取（取走缓冲数据）、非阻塞写入（不卡住调用者）、注册通知（有数据或状态变化时回调，由上层转成事件）。这样换板时只替换 BSP，应用层和 `utility` 都不用动。
 
-## devices 层：器件抽象
+## devices 层：设备类怎么写
 
-`devices/` 回答"**这个器件是什么**"（行为与语义），`bsp/` 回答"**它在这块板上怎么接**"（引脚、极性、总线、初始化）。
+`devices/` 回答"**这个器件是什么**"（行为与语义），`bsp/` 回答"**它在这块板上怎么接**"（引脚、极性、总线、初始化）。设备类**不 include 任何厂商头**，只依赖 `utility/` 与标准库。
 
-### 放什么
+写一个设备类按下面四步走。
 
-- 只有行为、没有硬件细节的器件模型：`Led`、`Button`、`Buzzer`、传感器量程换算、按键消抖状态机；
-- 多种实现共享的语义：`GpioLed`（直连 GPIO）、`PwmLed`（调光）、`I2cExpanderLed`（端口扩展）。
+### 1. 先判断值不值得抽象
 
-### 不放什么
+- 值得：器件本身有行为或状态语义——`Led`（开关 / 翻转）、`Button`（消抖、按下 / 松开）、`Buzzer`、传感器量程换算；
+- 不值得：只是"某块板的某个引脚怎么操作"——直接写进 `bsp/`，不要为了结构对称硬造一个设备类；
+- 只有当同一语义存在**多种接法**（`GpioLed` / `PwmLed` / `I2cExpanderLed`）或需要 PC 端 mock 时，虚接口才划算。
 
-- 任何厂商头文件（`stm32f4xx_hal.h`、`py32f0xx_hal.h`…），也不 include `mcu_cmsis.h`；
-- 引脚号、GPIO 端口、AF 编号、器件 I2C 地址——这些是板级事实；
-- 初始化代码（时钟使能、`HAL_GPIO_Init`、总线初始化）。
+### 2. 基类用 NVI：对外非虚，只留一个硬件钩子
 
-### 写法：NVI（非虚接口）
-
-对外方法非虚、由基类维护不变量；派生类只实现最小的硬件钩子：
+public 方法维护不变量（状态缓存、边界条件），派生类只实现钩子：
 
 ```cpp
 // devices/led.hpp
 class Led {
 public:
-	void SetState(bool state) {
+	void SetState(bool state) {          // 对外接口：非虚
 		state_ = state;
 		SetIo(state_);
 	}
@@ -412,12 +409,20 @@ public:
 	bool GetState() const { return state_; }
 
 protected:
-	~Led() = default;   // 实例都是静态对象，不会通过基类 delete
+	~Led() = default;                    // 静态对象，不会通过基类 delete
 	bool state_ = false;
 
-	virtual void SetIo(bool on) = 0;   // on == true 表示"点亮"
+	virtual void SetIo(bool on) = 0;     // 唯一的硬件钩子
 };
 ```
+
+要点：
+
+- 钩子的参数用**语义**（`on == true` 表示点亮），不是电平——电平是板级细节；
+- 基类不持有 HAL 类型、不初始化外设、不读寄存器；
+- 状态缓存放在基类，派生类不要再存一份，避免两处状态打架。
+
+### 3. 派生类只实现钩子，硬件细节都留在这里
 
 ```cpp
 // bsp/gpio_led.hpp
@@ -438,26 +443,72 @@ private:
 };
 ```
 
-### 什么时候不该用虚接口
+派生类可以持有 `GPIO_TypeDef *`、引脚号、极性、总线句柄，但**不初始化引脚**——时钟使能与 `HAL_GPIO_Init` 由 `Board` 统一做。这样构造顺序、初始电平、引脚归属都只有一个地方说了算。
 
-只有一种实现、也不需要 PC 端 mock 时，vptr + vtable 是纯开销。此时把硬件原语注入即可（零开销，见「反模式与正确做法」）：`led` 持有 `void (*write)(bool, void*)`，由 BSP 传入静态函数。
+### 4. 需要读初值 / 启动采样的器件：提供 `Start()`，不要在构造函数里读
 
-判断标准：**需要运行时替换实现 / 要在 PC 上跑单测** → 虚接口；否则函数指针或模板 policy。
+按键、传感器这类"构造时想先读一次初值"的器件，**不能在基类构造函数里调用纯虚 `Read()`**：基类构造期间派生类还没构造，这是未定义行为（会落到 `__cxa_pure_virtual`）。
 
-### 实例放哪、何时构造
+正确做法是把"采样起点"做成显式 `Start()`，由 `Board` 在引脚配置完成后调用：
+
+```cpp
+class Button {
+public:
+	void Start() {          // Board 配好引脚后调用
+		last_ = Read();     // 此时派生类已构造，虚调用安全
+		timer_.start();
+	}
+
+	void Stop() { timer_.stop(); }
+
+protected:
+	~Button() = default;            // 静态对象
+	virtual bool Read() const = 0;  // true == 按下
+
+private:
+	timer timer_;
+	bool last_ = false;
+
+	void OnTimerTick() {            // 运行在 1ms tick 中断里
+		const bool now = Read();
+		if (last_ && !now) {        // 按下 -> 松开
+			// 只调用上层注册的回调，由上层 PostXxx()，不在这里做业务
+		}
+		last_ = now;
+	}
+};
+```
+
+派生类只需实现 `Read()`：
+
+```cpp
+// bsp/gpio_button.hpp
+bool Read() const override {
+	const bool level = HAL_GPIO_ReadPin(port_, pin_) == GPIO_PIN_SET;
+	return level == active_high_;          // 统一成"是否按下"
+}
+```
+
+### 5. 实例放在哪、什么时候构造
 
 - 一律静态对象：`Board` 的成员，或 `board.cpp` 里命名空间作用域的静态对象；**禁止 `new`**；
 - **不要用函数内 `static`**：C++11 会插入 `__cxa_guard_acquire/release`，每次访问都判断；更严重的是**首次访问若发生在 ISR 里，就等于在中断里做外设初始化**；
-- 构造/析构里不要碰硬件：由 `Board` 构造先使能时钟、`HAL_GPIO_Init`，再 `SetState(false)` 确定初始电平；
+- 构造里只保存配置（端口 / 引脚 / 极性），不碰寄存器；初值在 `Board` 初始化完成后通过 `Start()` / `SetState()` 设定；
 - 析构里**不要** `HAL_*_DeInit`：静态对象在裸机上永不析构，这段代码只会拖入 `__cxa_atexit` 并白占 flash。
 
-### 命名
+### 6. 什么时候不该用虚接口
+
+只有一种实现、也不需要 PC 端 mock 时，vptr + vtable 是纯开销。此时把硬件原语注入即可：设备类持有 `void (*write)(bool, void *)`，由 BSP 传入静态函数。
+
+判断标准：**需要运行时替换实现 / 要在 PC 上跑单测** → 虚接口；否则用函数指针或模板 policy。
+
+### 7. 命名
 
 - 接口按行为命名：`Led`、`Button`、`Imu`（不加 `I` 前缀，也不加 `Io` 前缀）；
 - 实现按差异命名：`GpioLed`、`PwmLed`、`SoftI2cButton`；目录已经表明它是 BSP，不必再加 `Bsp` 前缀；
 - 文件名与类名对应：`devices/led.hpp` → `Led`，`bsp/gpio_led.hpp` → `GpioLed`。
 
-`Board` 只暴露基类：`Led *GetLed(size_t index)`，应用层拿不到 `GpioLed`，也就拿不到 HAL 类型。
+`Board` 只暴露基类（`Led *GetLed(size_t)`、`Button *GetButton(size_t)`），应用层拿不到 `GpioLed` / `GpioButton`，也就拿不到 HAL 类型。
 
 ## API 速查
 
@@ -513,6 +564,7 @@ private:
 | 在驱动构造里 `HAL_GPIO_Init`、在析构里 `HAL_GPIO_DeInit` | 初始化归 `Board`（先使能时钟再配引脚），驱动只读写电平；静态对象永不析构，DeInit 只会拖入 `__cxa_atexit` |
 | `Board::GetXxx()` 内用函数内 `static` 首次构造外设 | 用命名空间作用域 / `Board` 成员静态对象，在开中断前完成构造（避免 `__cxa_guard` 与 ISR 内初始化） |
 | 为只有一种实现的器件引入虚基类 | 只有需要运行时替换或 PC 端 mock 才用虚接口，否则用函数指针 / 模板 policy 注入 |
+| 在器件基类构造函数里调用纯虚 `Read()` / `SetIo()` 取初值 | 提供 `Start()`，由 `Board` 在引脚配置完成后调用；基类构造期间调用纯虚函数是 UB |
 | ISR 里触发单例首次构造 | 在开中断前完成所有单例初始化 |
 
 ## 完整模板

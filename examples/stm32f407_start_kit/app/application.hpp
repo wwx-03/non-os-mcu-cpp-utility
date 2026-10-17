@@ -27,6 +27,8 @@ private:
 	static constexpr uint32_t SERIAL_RECEIVED_EVENT = 0x00000002u;
 	static constexpr uint32_t TIMER_ELAPSED_EVENT = 0x00000003u;
 	static constexpr uint32_t WATCHDOG_REFRESH_EVENT = 0x00000004u;
+	static constexpr uint32_t BLINK_EVENT = 0x00000005u;
+	static constexpr uint32_t BUTTON_RELEASED_EVENT = 0x00000006u;
 
 	struct QueueItem {
 		uint32_t event;
@@ -34,12 +36,16 @@ private:
 			struct {
 				size_t size;
 			} serial_received;
+			struct {
+				uint8_t index;
+			} button_released;
 		} data;
 	};
 
 	queue<QueueItem, QUEUE_LENGTH> queue_;
 	timer tick_timer_;
 	timer watchdog_timer_;
+	timer blink_timer_;
 	volatile uint32_t dropped_ = 0;
 
 	Application();
@@ -47,9 +53,12 @@ private:
 
 	void PostEvent(uint32_t event);
 	void PostSerialReceivedEvent(size_t size);
+	void PostButtonReleasedEvent(uint8_t index);
 
 	void HandleStart();
 	void HandleSerialReceived(const QueueItem &item);
 	void HandleTimerElapsed();
 	void HandleWatchdogRefresh();
+	void HandleButtonReleased(const QueueItem &item);
+	void HandleBlink();
 };

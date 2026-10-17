@@ -95,3 +95,18 @@
 - 修正驱动职责：`GpioLed` 构造不再 `HAL_GPIO_Init`，析构删除 `HAL_GPIO_DeInit`（静态对象永不析构，只会拖入 `__cxa_atexit`）。
 - `Board` 的常量去掉保留标识符前缀：`_SERIAL1_RX_SIZE` → `SERIAL1_RX_SIZE`。
 - 应用层每秒翻转 LED 并输出 `Tick: <秒数>, dropped: <n>`；`Serial` 增加 `vsnprintf` 格式化发送重载，`Core/Src/retarget.c` 关闭 armlib 的 semihosting 依赖。
+
+## 0011 — 2026-10-17
+
+### 新增
+- 范例 `stm32f407_start_kit` 增加**按键例子**：PA0 输入下拉、按下为高，每 25 ms 采样消抖，松开时串口输出 `Button0 released`。
+  - `devices/button.hpp`：按键设备类（NVI）。`Start()` 记录初始电平并启动采样，检测到"按下 → 松开"时回调上层；回调运行在 1ms tick 上下文，因此只做事件投递。
+  - `bsp/gpio_button.hpp`：`GpioButton`，`Read()` 读引脚并按 `active_high` 统一成"是否按下"。
+  - `Board` 新增 `BUTTON0_INDEX` / `GetButton()`，构造中把 PA0 配为输入下拉，并在引脚就绪后调用 `button0.Start()`。
+  - 应用侧新增 `BUTTON_RELEASED_EVENT`（载荷 `uint8_t index`）、`PostButtonReleasedEvent()`、`HandleButtonReleased()`：中断里只投递事件，串口输出在 handler 里完成。
+
+### 修改
+- `SKILL.md` 的「devices 层」改写为**「设备类怎么写」**：按"先判断值不值得抽象 → 基类用 NVI → 派生类只实现钩子 → 需要初值时用 `Start()` → 实例放在哪 / 何时构造 → 什么时候不用虚接口 → 命名"的顺序给出写法，并说明**不要在基类构造函数里调用纯虚函数**。
+- `references/adapter-templates.md` 检查清单补充"基类构造函数不调纯虚函数"。
+- 修正 `Button` 实现自身的缺陷：构造函数不再调用纯虚 `Read()`（UB），改为显式 `Start()`；`last_` 初始化，析构改为 protected 非虚。
+- 范例 `stm32f407_start_kit` 同步按键实现与文档。

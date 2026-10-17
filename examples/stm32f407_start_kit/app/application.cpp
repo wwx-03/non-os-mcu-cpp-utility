@@ -12,6 +12,11 @@ Application::Application() {
 		static_cast<Application *>(ctx)->PostEvent(WATCHDOG_REFRESH_EVENT);
 	}, this);
 
+	// 每 250 ms 切换一次 LED 状态
+	blink_timer_.create(250, true, +[](void *ctx) {
+		static_cast<Application *>(ctx)->PostEvent(BLINK_EVENT);
+	}, this);
+
 	auto *serial = Board::GetInstance().GetSerial();
 
 	serial->SetSpecificCharactersCallback('\n', +[](size_t size, void *ctx) {
@@ -21,6 +26,14 @@ Application::Application() {
 	serial->SetRxBufferFullCallback(+[](size_t size, void *ctx) {
 		static_cast<Application *>(ctx)->PostSerialReceivedEvent(size);
 	}, this);
+
+	// 按键回调运行在 1ms tick 中断里，这里只投递事件
+	Board::GetInstance().GetButton(Board::BUTTON0_INDEX)->SetReleasedCallback(
+		+[](void *ctx) {
+			static_cast<Application *>(ctx)->PostButtonReleasedEvent(
+				static_cast<uint8_t>(Board::BUTTON0_INDEX));
+		},
+		this);
 
 	PostEvent(START_EVENT);
 }
@@ -45,6 +58,12 @@ void Application::Start() {
 		case WATCHDOG_REFRESH_EVENT:
 			HandleWatchdogRefresh();
 			break;
+		case BLINK_EVENT:
+			HandleBlink();
+			break;
+		case BUTTON_RELEASED_EVENT:
+			HandleButtonReleased(item);
+			break;
 		default:
 			break;
 		}
@@ -68,9 +87,19 @@ void Application::PostSerialReceivedEvent(const size_t size) {
 	}
 }
 
+void Application::PostButtonReleasedEvent(const uint8_t index) {
+	QueueItem item = {};
+	item.event = BUTTON_RELEASED_EVENT;
+	item.data.button_released.index = index;
+	if (!queue_.push(item)) {
+		++dropped_;
+	}
+}
+
 void Application::HandleStart() {
 	tick_timer_.start();
 	watchdog_timer_.start();
+	blink_timer_.start();
 	Board::GetInstance().RefreshWatchdog();
 }
 
@@ -92,16 +121,31 @@ void Application::HandleTimerElapsed() {
 	auto &board = Board::GetInstance();
 	auto *serial = board.GetSerial();
 	serial->Write("Tick: %lu, dropped: %lu\r\n", seconds, dropped_);
-
-	auto *red_led = board.GetLed(Board::RED_LED_INDEX);
-	red_led->Toggle();
-
-	auto *green_led = board.GetLed(Board::GREEN_LED_INDEX);
-	green_led->Toggle();
 }
 
 void Application::HandleWatchdogRefresh() {
 	Board::GetInstance().RefreshWatchdog();
+}
+
+void Application::HandleBlink() {
+	auto &board = Board::GetInstance();
+	auto *led = board.GetLed(Board::RED_LED_INDEX);
+	if (led) {
+		led->Toggle();
+	}
+	led = board.GetLed(Board::GREEN_LED_INDEX);
+	if (led) {
+		led->Toggle();
+	}
+}
+
+void Application::HandleButtonReleased(const QueueItem &item) {
+	if (item.data.button_released.index != Board::BUTTON0_INDEX) {
+		return;
+	}
+
+	auto *serial = Board::GetInstance().GetSerial();
+	serial->Write("Button0 released\r\n");
 }
 
 extern "C" void app_main(void) {

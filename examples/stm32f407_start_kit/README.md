@@ -15,8 +15,9 @@
 | 时钟 | HSE 25 MHz → PLL 168 MHz |
 | 串口 | USART1：PA9 = TX，PA10 = RX，115200 8N1 |
 | LED | PF9（红）/ PF10（绿），低电平点亮，由 `Board` 初始化 |
+| 按键 | PA0，内部下拉、按下为高（WK_UP 风格），`Button` 每 25 ms 采样一次消抖 |
 | 看门狗 | IWDG（LSI 32 kHz / 4 × 4095 ≈ 512 ms），事件循环每 100 ms 喂狗 |
-| 现象 | 上电后每秒输出 `Tick: <秒数>, dropped: <丢事件数>`，同时翻转红/绿 LED；发送以 `\n` 结尾的数据会原样回显 |
+| 现象 | 每秒输出 `Tick: <秒数>, dropped: <丢事件数>`；每 250 ms 翻转 LED；**松开 PA0 时输出 `Button0 released`**；发送以 `\n` 结尾的数据会原样回显 |
 
 ## 目录结构
 
@@ -24,7 +25,7 @@
 examples/stm32f407_start_kit/
 ├── app/         # 应用层：Application 单例与事件循环（唯一的业务入口）
 ├── bsp/         # 板级支持包：Board 单例、HAL 回调转发、GPIO 驱动
-├── devices/     # 器件抽象：Led（不含任何厂商头）
+├── devices/     # 器件抽象：Led、Button（不含任何厂商头）
 ├── port/        # mcu_cmsis.h：唯一的 MCU 依赖点
 ├── Core/        # CubeMX 生成的外设初始化与中断入口（main.c / *_it.c）
 ├── Drivers/     # CMSIS + STM32F4 HAL（只保留本范例用到的文件）
@@ -65,17 +66,18 @@ EIDE 首次构建时会根据 `eide.yml` 生成 `build/Debug/builder.params` 与
 
 1. `Core/Src/main.c`：`HAL_Init()` → `SystemClock_Config()` → 外设初始化 → `app_main()`。
 2. `app/application.cpp`
-   - 构造函数：创建 1000 ms 周期 `timer`、注册 BSP 通知回调、投递 `START_EVENT`；
-   - 另有一个 100 ms `timer` 投递 `WATCHDOG_REFRESH_EVENT`，在事件循环里喂 IWDG；
+   - 构造函数：创建 1000 ms `tick_timer_`、100 ms 喂狗定时器、250 ms 闪灯定时器，注册 BSP 通知回调（串口收满 / 按键释放），投递 `START_EVENT`；
+   - 按键回调只调用 `PostButtonReleasedEvent()`，业务在 `HandleButtonReleased()` 里输出 `Button0 released`；
    - `Start()`：全工程唯一的事件循环，`pop` → `switch` → `HandleXxx()`。
 3. `bsp/board.cpp`
-   - `Board::GetInstance()` 单例，持有 UART 驱动对象与两个 `GpioLed`，并暴露 `RefreshWatchdog()`；
-   - `Board` 构造函数里使能 GPIOF 时钟、`HAL_GPIO_Init` PF9/PF10，再确定初始电平；
+   - `Board::GetInstance()` 单例，持有 UART 驱动、两个 `GpioLed` 与一个 `GpioButton`，并暴露 `RefreshWatchdog()`；
+   - `Board` 构造函数里使能 GPIOF 时钟、`HAL_GPIO_Init` PF9/PF10（输出）与 PA0（输入下拉），随后确定 LED 初始电平并 `button0.Start()` 建立采样基线；
    - `HAL_UART_RxCpltCallback` / `HAL_UART_ErrorCallback` 只把事件转给 `Serial`；
    - `HAL_IncTick` 里调用 `timer::OnMilliSecondTick()` —— 1ms tick 的唯一接入点。
-4. `bsp/gpio_led.hpp` / `devices/led.hpp`：`Led` 是 NVI 接口（`SetState`/`Toggle`/`GetState` 非虚，派生类只实现 `SetIo`），`GpioLed` 负责电平与极性；`devices/` 不含任何 HAL 头。
-5. `bsp/serial.hpp`：1 字节中断接收 + `stream_buffer` + `HAL_UART_Transmit_IT` 非阻塞发送，另有 `vsnprintf` 格式化输出重载。
-6. `port/mcu_cmsis.h`：`#include "stm32f4xx.h"`，`irq_lock` 的唯一 MCU 依赖点。
+4. `bsp/gpio_led.hpp` / `devices/led.hpp`：`Led` 是 NVI 接口（`SetState`/`Toggle`/`GetState` 非虚，派生类只实现 `SetIo`），`GpioLed` 负责电平与极性。
+5. `bsp/gpio_button.hpp` / `devices/button.hpp`：`Button` 用 `timer` 每 25 ms 采样做消抖，`Start()` 里记录初始电平并启动采样，检测到"按下 → 松开"时回调；`GpioButton` 只实现 `Read()`（含 `active_high` 极性）。
+6. `bsp/serial.hpp`：1 字节中断接收 + `stream_buffer` + `HAL_UART_Transmit_IT` 非阻塞发送，另有 `vsnprintf` 格式化输出重载。
+7. `port/mcu_cmsis.h`：`#include "stm32f4xx.h"`，`irq_lock` 的唯一 MCU 依赖点。
 
 ## 作为新工程模板
 
