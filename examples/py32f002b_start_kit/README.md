@@ -41,6 +41,8 @@ examples/py32f002b_start_kit/
 
 构建产物位于 `EIDE/build/`，已被仓库根目录的 `.gitignore` 忽略。
 
+> 如果宿主工程把这个仓库目录也加进了 `srcDirs`（源目录扫描），请排除 `examples/**`，否则本范例的 `.cpp` 会被重复编译。
+
 ## 代码导读（一条完整调用链）
 
 1. `Core/SRC/main.c`：初始化时钟与外设，最后调用 `app_main()`。

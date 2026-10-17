@@ -21,6 +21,8 @@
 
 把本目录加入工程的 include 路径即可，不需要编译任何 `.cpp`。
 
+注意：**只加 `incList`（include 路径），不要把本目录整体加进 `srcDirs`（源目录扫描）**——`examples/` 下是独立工程，被扫描到会重复编译。若工程必须扫描本目录，请用 `excludeList` 排除 `examples/**`。
+
 ### 2. 提供 MCU 桥接头（唯一的移植点）
 
 `irq_lock.hpp` 通过 `mcu_cmsis.h` 间接依赖当前 MCU 的 CMSIS，工程里需要提供这个文件：

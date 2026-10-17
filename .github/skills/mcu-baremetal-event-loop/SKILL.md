@@ -57,6 +57,8 @@ app/      Application —— 事件循环唯一实现位置
 
 3. 把 tick 接进来：在 1ms 中断里调用 `timer::OnMilliSecondTick()`（SysTick 或 TIM 均可）。
 
+> **接入方式**：本仓库只有头文件，加入工程的 **include 路径**即可（如 EIDE 的 `incList`）。不要把仓库目录同时加进 `srcDirs`（源目录扫描），否则 `examples/` 下的范例会被重复编译；工程必须扫描该目录时，用 `excludeList` 排除 `examples/**`。
+
 ## Application：事件循环与投递
 
 `Application` 是整个工程里**唯一**的事件循环，也是唯一持有事件队列的地方。它同时是**单例**，只能通过 `GetInstance()` 获取，不允许有第二个实例：
