@@ -31,6 +31,6 @@
 2. `bsp/board.*` 换成目标板的资源与 HAL 回调；
 3. `app/application.*` 修改事件号、载荷与 handler；
 4. 在 1ms 中断里调用 `timer::OnMilliSecondTick()`；
-5. 工程 include 路径加入：仓库根目录、`app/`、`bsp/`、`port/`。
+5. 工程配置按 [SKILL.md](../.github/skills/mcu-baremetal-event-loop/SKILL.md) 的「EIDE 工程配置」设置：`srcDirs` 加 `app/`、`bsp/`、`port/`，`incList` 加仓库根目录，C++ 用 `c++17` 并关闭异常/RTTI。
 
 详细规则与反模式见 [SKILL.md](../.github/skills/mcu-baremetal-event-loop/SKILL.md)。

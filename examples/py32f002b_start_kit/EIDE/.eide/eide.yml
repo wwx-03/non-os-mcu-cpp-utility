@@ -6,6 +6,8 @@ packDir: ""
 srcDirs:
   - ../app
   - ../bsp
+  - ../port
+  - ../../..
 virtualFolder:
   name: <virtual_root>
   files: []
@@ -70,12 +72,13 @@ targets:
         - ../Drivers/CMSIS/Include
         - ../Drivers/PY32F002B_HAL_Driver/Inc
         - ../Drivers/CMSIS/Device/PY32F0xx/Include
-        - ../../..
-        - ../port
         - ../app
         - ../bsp
+        - ../../..
+        - ../port
       libList: []
-    excludeList: []
+    excludeList:
+      - ../../../examples
     settings:
       debugger: cortex-debug
     toolchain: GCC

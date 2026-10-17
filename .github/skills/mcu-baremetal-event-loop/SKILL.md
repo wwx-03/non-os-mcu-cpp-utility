@@ -1,6 +1,6 @@
 ---
 name: mcu-baremetal-event-loop
-description: '编写或改造裸机 MCU（Cortex-M / STM32 / PY32 / 嵌入式 C++）代码时使用本仓库（queue.hpp、stream_buffer.hpp、timers.hpp、irq_lock.hpp）已有的工程模式：中断只投递事件、由 Application 的事件循环统一派发、BSP 层 Board 统一管理板级资源、静态内存、irq_lock 临界区、1ms 软件定时器。新建工程、换板、生成工程骨架时，以仓库自带范例 examples/py32f002b_start_kit 为模板复制 app/bsp/port 三层再替换实现。Use when adding peripherals, events, timers, UART protocols, drivers, BSP/board ports, scaffolding a new bare-metal project, or porting this library into an existing one, and generate code that follows these patterns instead of inventing new ones.'
+description: '编写或改造裸机 MCU（Cortex-M / STM32 / PY32 / 嵌入式 C++）代码时使用本仓库（queue.hpp、stream_buffer.hpp、timers.hpp、irq_lock.hpp）已有的工程模式：中断只投递事件、由 Application 的事件循环统一派发、BSP 层 Board 统一管理板级资源、静态内存、irq_lock 临界区、1ms 软件定时器。新建工程、换板、生成工程骨架时，以仓库自带范例 examples/py32f002b_start_kit 为模板复制 app/bsp/port 三层再替换实现。Use when adding peripherals, events, timers, UART protocols, drivers, BSP/board ports, scaffolding a new bare-metal project, configuring its EIDE project (eide.yml: srcDirs, incList, C++17/no-exceptions/no-rtti, linker flags), or porting this library into an existing one, and generate code that follows these patterns instead of inventing new ones.'
 argument-hint: '要新增的外设 / 事件 / 定时任务，例如"加一个按键长按事件"'
 ---
 
@@ -36,12 +36,87 @@ argument-hint: '要新增的外设 / 事件 / 定时任务，例如"加一个按
 
 1. 复制 `examples/py32f002b_start_kit/` 的 `app/`、`bsp/`、`port/` 三个目录（**不要复制** `Core/`、`Drivers/`、`EIDE/`，它们必须由目标 MCU 的厂商工具生成）。
 2. 替换 `port/mcu_cmsis.h` 的器件头；确认平台提供 `__get_PRIMASK` / `__disable_irq` / `__set_PRIMASK`，缺失时在该头里补齐转接。
-3. 按目标板重写 `bsp/board.*` 与驱动（串口、按键…），保持 `Board` 单例与"读 / 写 / 注册通知"契约。
+3. 按目标板重写 `bsp/board.*` 与驱动（串口、按键…），保持 `Board` 单例与"读 / 写 / 注册通知"契约。范例里的 `usart.h` / `iwdg.h` 是 PY32F002B 的厂商文件，换板时换成新工程的初始化头；目标工程没有 IWDG 时删掉 `RefreshWatchdog()` 与喂狗定时器。
 4. 修改 `app/application.*` 的事件号、`QueueItem` 载荷与 handler。
 5. 在 1ms 中断里调用 `timer::OnMilliSecondTick()`。
-6. 工程配置：include 路径加入 **仓库根目录** + `app/` + `bsp/` + `port/`；仓库目录只加 include，不要加入源目录扫描。
+6. 工程配置：按下面「EIDE 工程配置」设置 `srcDirs` / `incList` / C++17 选项与链接参数，改完必须实际编译一次。
 
 生成的代码必须同时满足下面的铁律、分层与命名约定；范例只是骨架，业务逻辑要按需求重新实现。
+
+## EIDE 工程配置
+
+EIDE 工程目录固定为 `<project>/EIDE`，`app/`、`bsp/`、`port/` 与厂商生成的 `Core/`、`Drivers/` 平级。所有配置都在 `<project>/EIDE/.eide/eide.yml` 里，**直接改这个文件**，不要只靠 UI 点击。
+
+### 源目录与排除
+
+```yaml
+srcDirs:
+  - ../app
+  - ../bsp
+  - ../port
+  - ../non-os-mcu-cpp-utility                 # 仓库根目录：header-only，只为了让头文件出现在工程树
+targets:
+  Debug:
+    excludeList:
+      - ../non-os-mcu-cpp-utility/examples    # 必须排除，否则范例的 .cpp 会被一起编译
+```
+
+- 仓库根目录可以放进 `srcDirs`，但**必须同时用 `excludeList` 排除 `examples/**`**；不想这样做就只保留在 `incList`。
+- `Core/`、`Drivers/`、`startup_*.s` 用 `virtualFolder` 引用，不要复制。
+- `port/` 里只有 `mcu_cmsis.h`，加进 `srcDirs` 只是方便查看，不会有编译产物。
+
+### include 路径与宏
+
+```yaml
+targets:
+  Debug:
+    cppPreprocessAttrs:
+      defineList:
+        - PY32F002Bx5
+        - USE_HAL_DRIVER
+      incList:
+        - ../Core/INC
+        - ../Drivers/CMSIS/Include
+        - ../Drivers/PY32F002B_HAL_Driver/Inc
+        - ../Drivers/CMSIS/Device/PY32F0xx/Include
+        - ../app
+        - ../bsp
+        - ../non-os-mcu-cpp-utility
+        - ../port
+```
+
+`../port` 不能漏：`irq_lock.hpp` 通过它找到 `mcu_cmsis.h`。
+
+### 编译与链接选项
+
+| 字段 | 值 | 原因 |
+|---|---|---|
+| `c/cpp-compiler.language-c` | `c11` | 厂商 HAL 源码 |
+| `c/cpp-compiler.language-cpp` | `c++17` | `timers.hpp` 使用 inline 静态成员 |
+| `c/cpp-compiler.no-exceptions` / `no-rtti` | `true` | 裸机不引入异常与 RTTI |
+| `c/cpp-compiler.CXX_FLAGS` | `-Wno-register` | CMSIS / 厂商头仍使用 `register` |
+| `c/cpp-compiler.one-elf-section-per-function/-data` | `true` | 配合链接期裁剪 |
+| `global.misc-control` | `--specs=nosys.specs --specs=nano.specs` | 无系统调用、精简 libc |
+| `linker.LD_FLAGS` | `-Wl,--no-warn-rwx-segments` | 消除 binutils ≥ 2.39 的 RWX 段告警 |
+| `linker.remove-unused-input-sections` | `true` | `--gc-sections` |
+| `useCustomScatterFile` / `scatterFilePath` | `true` / 厂商链接脚本 | 由 MCU Studio 生成，不要手写 |
+
+`uploadConfigMap` 与 `.vscode/tasks.json` 里的 ELF 路径必须与 EIDE 输出名（`build/<target>/<name>.elf`）一致。
+
+### 改完必须验证
+
+按 `eide.yml` 的同一组参数手动编译一次，确认路径和选项没写错：
+
+```powershell
+arm-none-eabi-g++ -std=c++17 -fno-exceptions -fno-rtti -Wno-register `
+  -mcpu=cortex-m0plus -mthumb -DPY32F002Bx5 -DUSE_HAL_DRIVER `
+  -I../Core/INC -I../Drivers/CMSIS/Include -I../Drivers/PY32F002B_HAL_Driver/Inc `
+  -I../Drivers/CMSIS/Device/PY32F0xx/Include -I../app -I../bsp `
+  -I../non-os-mcu-cpp-utility -I../port `
+  -c ../app/application.cpp -o application.o
+```
+
+链接阶段再补 `-T<链接脚本> --specs=nosys.specs --specs=nano.specs -Wl,--gc-sections`。完整 `eide.yml` 片段见 [references/adapter-templates.md](./references/adapter-templates.md) §9。
 
 ## 三条铁律
 
@@ -208,6 +283,9 @@ private:
 | 整个函数用 `irq_lock` 包住 | 只保护几条共享变量的读写 |
 | 自己写毫秒计数 | 用 `timer`（或事件位图 + 1ms tick） |
 | 多个模块各自抢 `HAL_*_Callback` | 统一由 `Board` 分发或注册回调 |
+| 用 `HAL_UART_Receive_IT` 却实现 `HAL_USART_RxCpltCallback` | 回调名与所用 HAL API 对齐（UART → `HAL_UART_RxCpltCallback`） |
+| 厂商工程已启动 IWDG 却不喂狗 | 用 `timer` 周期投递事件，在 handler 里调用 `Board::RefreshWatchdog()` |
+| EIDE 把仓库根目录加进 `srcDirs` 却不排除 `examples/**` | 加 `excludeList`，或只把仓库根目录放进 `incList` |
 | ISR 里触发单例首次构造 | 在开中断前完成所有单例初始化 |
 
 ## 完整模板

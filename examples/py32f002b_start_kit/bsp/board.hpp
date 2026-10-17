@@ -15,6 +15,7 @@ public:
 	Board &operator=(const Board &) = delete;
 
 	Serial<128, 128> *GetSerial();
+	void RefreshWatchdog();
 
 private:
 	Board() = default;

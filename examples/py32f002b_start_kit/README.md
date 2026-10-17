@@ -13,6 +13,7 @@
 |---|---|
 | 芯片 | PY32F002Bx5，HSI 24 MHz |
 | 串口 | USART1：PA2 = RX，PA3 = TX，115200 8N1 |
+| 看门狗 | IWDG（约 512 ms 溢出），事件循环每 100 ms 喂狗 |
 | 现象 | 上电后每秒输出 `seconds elapsed`；发送以 `\n` 结尾的数据会原样回显 |
 
 ## 目录结构
@@ -38,7 +39,7 @@ examples/py32f002b_start_kit/
 | `Core/`、`Drivers/` | 厂商 | 时钟/外设初始化、CMSIS、HAL |
 | 仓库根目录 | 工具库 | `queue.hpp` / `stream_buffer.hpp` / `timers.hpp` / `irq_lock.hpp` |
 
-`queue.hpp`、`stream_buffer.hpp`、`timers.hpp`、`irq_lock.hpp` **直接来自仓库根目录，本目录没有复制一份**。EIDE 工程通过 `incList` 里的 `../../..` 指向仓库根目录，所以 `#include "queue.hpp"` 能正常解析；如果移动了本目录的位置，需要同步修改该路径。
+`queue.hpp`、`stream_buffer.hpp`、`timers.hpp`、`irq_lock.hpp` **直接来自仓库根目录，本目录没有复制一份**。EIDE 工程把仓库根目录 `../../..` 同时放进 `srcDirs` 与 `incList`，并在 `excludeList` 中排除 `../../../examples`，所以 `#include "queue.hpp"` 能正常解析、范例的 `.cpp` 也不会被重复编译；如果移动了本目录的位置，需要同步修改这三处路径。
 
 ## 构建与下载
 
@@ -56,10 +57,11 @@ examples/py32f002b_start_kit/
 1. `Core/SRC/main.c`：初始化时钟与外设，最后调用 `app_main()`。
 2. `app/application.cpp`
    - 构造函数：创建 1000 ms 周期 `timer`、注册 BSP 通知回调、投递 `START_EVENT`；
+   - 另有一个 100 ms `timer` 投递 `WATCHDOG_REFRESH_EVENT`，在事件循环里喂 IWDG（本工程的 IWDG 约 512 ms 溢出）；
    - `Start()`：全工程唯一的事件循环，`pop` → `switch` → `HandleXxx()`。
 3. `bsp/board.cpp`
-   - `Board::GetInstance()` 单例，持有 UART 驱动对象；
-   - `HAL_USART_RxCpltCallback` 只把事件转给 `Serial::HandleRxCpltEvent()`；
+   - `Board::GetInstance()` 单例，持有 UART 驱动对象，并暴露 `RefreshWatchdog()`；
+   - `HAL_UART_RxCpltCallback` / `HAL_UART_ErrorCallback` 只把事件转给 `Serial`，与 `HAL_UART_*` API 匹配；
    - `HAL_IncTick` 里调用 `timer::OnMilliSecondTick()` —— 这就是 1ms tick 的唯一接入点。
 4. `bsp/serial.hpp`：1 字节中断接收 + `stream_buffer` + `HAL_UART_Transmit_IT` 非阻塞发送。
 5. `port/mcu_cmsis.h`：`#include "py32f0xx.h"`，`irq_lock` 的唯一 MCU 依赖点。
@@ -72,3 +74,4 @@ examples/py32f002b_start_kit/
 
 - `bsp/` 是**这块板子的 BSP 实现**，用于演示运行效果；换板时请按仓库 `SKILL.md` 的契约重新实现，不要直接复制。
 - 事件回调运行在中断上下文，只能投递事件，不要在里面解析协议或阻塞。
+- 厂商的 `Studio_IWDG_Init()` 已启动看门狗，`Application` 用 100 ms `timer` 周期喂狗；如果目标工程没有 IWDG，删除 `Board::RefreshWatchdog()` 与对应的定时器事件。

@@ -1,11 +1,13 @@
 #pragma once
 
-#include "queue.hpp"
+#include <stddef.h>
+#include <stdint.h>
 
+#include "queue.hpp"
 #include "timers.hpp"
 
 // 应用层：全工程唯一的事件循环（单例）。
-// 中断只通过 PostXxx() 投递事件，业务全部在 Start() 的派发循环里处理。规则见仓库 SKILL.md。
+// 中断只通过 PostXxx() 投递事件，业务全部在 Start() 的派发循环里处理。
 class Application {
 public:
 	static Application &GetInstance() {
@@ -24,6 +26,7 @@ private:
 	static constexpr uint32_t START_EVENT = 0x00000001u;
 	static constexpr uint32_t SERIAL_RECEIVED_EVENT = 0x00000002u;
 	static constexpr uint32_t TIMER_ELAPSED_EVENT = 0x00000003u;
+	static constexpr uint32_t WATCHDOG_REFRESH_EVENT = 0x00000004u;
 
 	struct QueueItem {
 		uint32_t event;
@@ -35,15 +38,18 @@ private:
 	};
 
 	queue<QueueItem, QUEUE_LENGTH> queue_;
-	timer timer_;
+	timer tick_timer_;
+	timer watchdog_timer_;
+	volatile uint32_t dropped_ = 0;
 
 	Application();
 	~Application() = default;
 
-	void PostEvent(const uint32_t e);
-	void PostSerialReceivedEvent(const size_t size);
+	void PostEvent(uint32_t event);
+	void PostSerialReceivedEvent(size_t size);
 
 	void HandleStart();
 	void HandleSerialReceived(const QueueItem &item);
 	void HandleTimerElapsed();
+	void HandleWatchdogRefresh();
 };

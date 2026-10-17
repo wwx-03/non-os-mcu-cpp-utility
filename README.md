@@ -19,9 +19,9 @@
 
 ### 1. 加入 include 路径
 
-把本目录加入工程的 include 路径即可，不需要编译任何 `.cpp`。
+把本目录加入工程的 include 路径（EIDE 的 `incList`）即可，不需要编译任何 `.cpp`。
 
-注意：**只加 `incList`（include 路径），不要把本目录整体加进 `srcDirs`（源目录扫描）**——`examples/` 下是独立工程，被扫描到会重复编译。若工程必须扫描本目录，请用 `excludeList` 排除 `examples/**`。
+也可以把本目录加进 EIDE 的 `srcDirs`，方便在工程树里浏览头文件；但**必须同时用 `excludeList` 排除 `examples/**`**，否则范例的 `.cpp` 会被重复编译。各字段的取值见 [SKILL.md](./.github/skills/mcu-baremetal-event-loop/SKILL.md) 的「EIDE 工程配置」。
 
 ### 2. 提供 MCU 桥接头（唯一的移植点）
 

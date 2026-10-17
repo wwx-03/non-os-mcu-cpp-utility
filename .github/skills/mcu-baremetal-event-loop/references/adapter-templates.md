@@ -28,17 +28,22 @@ static inline void __set_PRIMASK(uint32_t state) { xxx_restore_irq(state); }
 
 ## 2. tick 接入（1ms）
 
+厂商工具生成的 `*_it.c` 通常已经定义了 `SysTick_Handler`，此时**不要重复定义**，改为覆盖 HAL 的弱符号 `HAL_IncTick`（范例就是这么做的）：
+
 ```cpp
-// tick.cpp —— 覆盖 startup 里的弱符号
+// board.cpp —— 挂在厂商的 SysTick_Handler 调用链上
 #include "timers.hpp"
 #include "py32f0xx_hal.h"
 
-extern "C" void SysTick_Handler(void)
+extern "C" void HAL_IncTick(void)
 {
-	HAL_IncTick();                 // HAL 自己的毫秒计数
+	extern __IO uint32_t uwTick;
+	uwTick += uwTickFreq;          // HAL 自己的毫秒计数
 	timer::OnMilliSecondTick();    // 驱动所有软件定时器
 }
 ```
+
+如果工程里没有现成的 `SysTick_Handler`（或使用 TIM 产生 1ms tick），也可以直接在该中断入口里调用 `timer::OnMilliSecondTick()`；**全工程只能接入一次**。回调运行在中断上下文，只允许 `PostXxx()`。
 
 ## 3. BSP：Board 契约
 
@@ -395,4 +400,111 @@ private:
 - [ ] 所有共享变量都有 `irq_lock` 或单写者保证
 - [ ] 没有新增动态内存
 - [ ] 没有把其它板子的 `Serial` / `Timer` 实现直接搬过来
+- [ ] HAL 回调名与所用 API 匹配（`HAL_UART_Receive_IT` → `HAL_UART_RxCpltCallback`）
+- [ ] 厂商初始化里已启动 IWDG 时，有周期喂狗（`timer` 投递事件 → `Board::RefreshWatchdog()`）
+- [ ] EIDE `srcDirs` 含仓库根目录时已用 `excludeList` 排除 `examples/**`
 - [ ] 用 `-Wall -Wextra -fno-exceptions -fno-rtti -std=c++17` 编译通过
+
+## 9. EIDE 工程配置模板
+
+EIDE 工程目录固定为 `<project>/EIDE`，`.eide/eide.yml` 的关键字段如下（路径相对 `EIDE/`；范例位于 `examples/py32f002b_start_kit`，所以仓库根目录是 `../../..`，普通工程通常是 `../non-os-mcu-cpp-utility`）：
+
+```yaml
+version: "4.1"
+name: <project>
+type: ARM
+deviceName: PY32F002Bx5
+srcDirs:
+  - ../app
+  - ../bsp
+  - ../port
+  - ../non-os-mcu-cpp-utility
+virtualFolder:            # Core / Drivers / startup 用虚拟目录引用，不复制
+  name: <virtual_root>
+  files: []
+  folders:
+    - name: Application
+      files: []
+      folders:
+        - name: EIDE
+          files:
+            - path: startup_py32f002bxx.s
+          folders: []
+        - name: User
+          files: []
+          folders:
+            - name: Core
+              files:
+                - path: ../Core/SRC/main.c
+                # … gpio.c / tim.c / usart.c / iwdg.c / rcc.c /
+                #   py32f002b_it.c / py32f002b_hal_msp.c
+              folders: []
+    - name: Drivers
+      files: []
+      folders:
+        - name: CMSIS
+          files:
+            - path: ../Core/SRC/system_py32f002b.c
+          folders: []
+        - name: PY32F002B_HAL_Driver
+          files:
+            # 只列用到的 HAL 模块，必须与 py32f002b_hal_conf.h 打开的模块一致
+            - path: ../Drivers/PY32F002B_HAL_Driver/Src/py32f002b_hal.c
+          folders: []
+outDir: build
+targets:
+  Debug:
+    cppPreprocessAttrs:
+      defineList:
+        - PY32F002Bx5
+        - USE_HAL_DRIVER
+      incList:
+        - ../Core/INC
+        - ../Drivers/CMSIS/Include
+        - ../Drivers/PY32F002B_HAL_Driver/Inc
+        - ../Drivers/CMSIS/Device/PY32F0xx/Include
+        - ../app
+        - ../bsp
+        - ../non-os-mcu-cpp-utility
+        - ../port
+    excludeList:
+      - ../non-os-mcu-cpp-utility/examples
+    toolchain: GCC
+    toolchainConfigMap:
+      GCC:
+        cpuType: Cortex-M0+
+        floatingPointHardware: none
+        options:
+          c/cpp-compiler:
+            CXX_FLAGS: -Wno-register
+            language-c: c11
+            language-cpp: c++17
+            no-exceptions: true
+            no-rtti: true
+            one-elf-section-per-data: true
+            one-elf-section-per-function: true
+            optimization: level-2
+            warnings: all-warnings
+          global:
+            $float-abi-type: softfp
+            arm-thumb-mode: thumb
+            misc-control: --specs=nosys.specs --specs=nano.specs
+            output-debug-info: enable
+          linker:
+            $toolName: auto
+            LD_FLAGS: -Wl,--no-warn-rwx-segments
+            LIB_FLAGS: -lm
+            output-format: elf
+            remove-unused-input-sections: true
+        scatterFilePath: PY32F002BF15U6.ld
+        useCustomScatterFile: true
+    uploader: pyOCD
+```
+
+检查点：
+
+- `srcDirs` 放进仓库根目录时，**必须**同步排除 `examples/**`；否则范例的 `.cpp` 会被编译进当前工程。
+- `../port` 必须同时出现在 `incList`，否则 `irq_lock.hpp` 找不到 `mcu_cmsis.h`。
+- `language-cpp` 必须是 `c++17`；`no-exceptions` / `no-rtti` 必须打开。
+- `py32f002b_hal_conf.h` 打开的每个 HAL 模块都要在 `virtualFolder` 的 `Src` 列表里有对应 `.c`。
+- `.vscode/tasks.json` 与 `uploadConfigMap` 的 ELF 路径要和 `outDir/<target>/<name>.elf` 一致。

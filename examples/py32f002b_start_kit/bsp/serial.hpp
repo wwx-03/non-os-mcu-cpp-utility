@@ -1,9 +1,9 @@
 #pragma once
 
-#include "py32f0xx_hal.h"
-
-#include <tuple>
 #include <array>
+#include <tuple>
+
+#include "py32f0xx_hal.h"
 
 #include "stream_buffer.hpp"
 
@@ -44,9 +44,8 @@ public:
 	}
 
 	void HandleRxCpltEvent() {
-		HAL_UART_Receive_IT(huart_, &temp_, sizeof(temp_));
-
 		sb_.write(&temp_, sizeof(temp_));
+		HAL_UART_Receive_IT(huart_, &temp_, sizeof(temp_));
 
 		{ // 执行特定字符接收回调函数
 			const auto &[c, cb, ctx] = character_entry_;
@@ -63,6 +62,11 @@ public:
 		}
 	}
 
+	// 溢出等错误后重新挂起接收，避免接收通道永久失效（已在接收中时 HAL 返回 HAL_BUSY）
+	void HandleErrorEvent() {
+		HAL_UART_Receive_IT(huart_, &temp_, sizeof(temp_));
+	}
+
 private:
 	UART_HandleTypeDef *huart_ = nullptr;
 	stream_buffer<kRxSize> sb_;
@@ -72,4 +76,3 @@ private:
 	std::tuple<char, character_callback_t, void *> character_entry_ = {};
 	std::tuple<full_callback_t, void *> full_entry_ = {};
 };
-

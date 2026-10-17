@@ -55,3 +55,13 @@
 - `SKILL.md` 新增「用范例生成工程骨架」：新建工程/换板时以 `examples/py32f002b_start_kit` 为模板复制 `app/`、`bsp/`、`port/` 三层，`Core/`、`Drivers/` 交由厂商工具生成；`description` 补充脚手架相关触发词。
 - 范例与顶层 README 同步更新目录树、分层说明与代码导读路径。
 - 范例关键文件补充角色注释（`app/application.hpp`、`bsp/board.hpp`、`bsp/serial.hpp`、`port/mcu_cmsis.h`），明确各层职责。
+
+## 0008 — 2026-10-17
+
+### 修改
+- 范例 `app/`、`bsp/` 补全两处会导致硬件不工作的缺陷：把 `HAL_USART_RxCpltCallback` 改为与 `HAL_UART_*` API 匹配的 `HAL_UART_RxCpltCallback`；新增 `HAL_UART_ErrorCallback`，溢出等错误后重新挂起接收。
+- 范例新增 IWDG 周期喂狗：`Application` 每 100 ms 投递 `WATCHDOG_REFRESH_EVENT`，`Board::RefreshWatchdog()` 调用 `HAL_IWDG_Refresh()`，与厂商 `Studio_IWDG_Init()` 对应。
+- 范例 EIDE 工程对齐已验证工程的配置：`srcDirs` 加入 `port/` 与仓库根目录，`excludeList` 排除 `examples/**`；`incList` 顺序同步。
+- `SKILL.md` 新增「EIDE 工程配置」：`srcDirs` / `excludeList`、`incList`、C/C++ 标准、链接参数与改完后的编译验证命令；反模式表补充 HAL 回调名、IWDG、EIDE 扫描三条。
+- `references/adapter-templates.md`：tick 接入改为覆盖 `HAL_IncTick`（避免与厂商 `*_it.c` 里的 `SysTick_Handler` 重复定义）；检查清单补充回调名、IWDG 与 EIDE 排除项；新增 §9「EIDE 工程配置模板」。
+- `README.md`、`examples/README.md`、范例 `README.md` 同步 EIDE 配置与喂狗说明。
