@@ -1,0 +1,139 @@
+version: "4.1"
+name: py32f002b_start_kit
+type: ARM
+deviceName: PY32F002Bx5
+packDir: ""
+srcDirs:
+  - ../main
+virtualFolder:
+  name: <virtual_root>
+  files: []
+  folders:
+    - name: Application
+      files: []
+      folders:
+        - name: EIDE
+          files:
+            - path: startup_py32f002bxx.s
+          folders: []
+        - name: User
+          files: []
+          folders:
+            - name: Core
+              files:
+                - path: ../Core/SRC/main.c
+                - path: ../Core/SRC/gpio.c
+                - path: ../Core/SRC/tim.c
+                - path: ../Core/SRC/usart.c
+                - path: ../Core/SRC/iwdg.c
+                - path: ../Core/SRC/rcc.c
+                - path: ../Core/SRC/py32f002b_it.c
+                - path: ../Core/SRC/py32f002b_hal_msp.c
+                - path: ../Core/SRC/syscalls.c
+              folders: []
+    - name: Drivers
+      files: []
+      folders:
+        - name: CMSIS
+          files:
+            - path: ../Core/SRC/system_py32f002b.c
+          folders: []
+        - name: PY32F002B_HAL_Driver
+          files:
+            - path: ../Drivers/PY32F002B_HAL_Driver/Src/py32f002b_hal.c
+            - path: ../Drivers/PY32F002B_HAL_Driver/Src/py32f002b_hal_rcc.c
+            - path: ../Drivers/PY32F002B_HAL_Driver/Src/py32f002b_hal_rcc_ex.c
+            - path: ../Drivers/PY32F002B_HAL_Driver/Src/py32f002b_hal_gpio.c
+            - path: ../Drivers/PY32F002B_HAL_Driver/Src/py32f002b_hal_pwr.c
+            - path: ../Drivers/PY32F002B_HAL_Driver/Src/py32f002b_hal_cortex.c
+            - path: ../Drivers/PY32F002B_HAL_Driver/Src/py32f002b_hal_flash.c
+            - path: ../Drivers/PY32F002B_HAL_Driver/Src/py32f002b_hal_exti.c
+            - path: ../Drivers/PY32F002B_HAL_Driver/Src/py32f002b_hal_usart.c
+            - path: ../Drivers/PY32F002B_HAL_Driver/Src/py32f002b_hal_uart.c
+            - path: ../Drivers/PY32F002B_HAL_Driver/Src/py32f002b_hal_tim.c
+            - path: ../Drivers/PY32F002B_HAL_Driver/Src/py32f002b_hal_tim_ex.c
+            - path: ../Drivers/PY32F002B_HAL_Driver/Src/py32f002b_hal_iwdg.c
+          folders: []
+dependenceList: []
+outDir: build
+miscInfo:
+  uid: ""
+targets:
+  Debug:
+    cppPreprocessAttrs:
+      defineList:
+        - PY32F002Bx5
+        - USE_HAL_DRIVER
+      incList:
+        - ../Core/INC
+        - ../Drivers/CMSIS/Include
+        - ../Drivers/PY32F002B_HAL_Driver/Inc
+        - ../Drivers/CMSIS/Device/PY32F0xx/Include
+        - ../../..
+        - ../main
+        - ../main/serial
+        - ../main/board
+      libList: []
+    excludeList: []
+    settings:
+      debugger: cortex-debug
+    toolchain: GCC
+    toolchainConfigMap:
+      GCC:
+        archExtensions: ""
+        cpuType: Cortex-M0+
+        floatingPointHardware: none
+        options:
+          version: 5
+          afterBuildTasks: []
+          asm-compiler: {}
+          beforeBuildTasks: []
+          c/cpp-compiler:
+            CXX_FLAGS: -Wno-register
+            language-c: c11
+            language-cpp: c++17
+            no-exceptions: true
+            no-rtti: true
+            one-elf-section-per-data: true
+            one-elf-section-per-function: true
+            optimization: level-2
+            warnings: all-warnings
+          global:
+            $float-abi-type: softfp
+            arm-thumb-mode: thumb
+            misc-control: --specs=nosys.specs --specs=nano.specs
+            output-debug-info: enable
+          linker:
+            $toolName: auto
+            LD_FLAGS: -Wl,--no-warn-rwx-segments
+            LIB_FLAGS: -lm
+            output-format: elf
+            remove-unused-input-sections: true
+        scatterFilePath: PY32F002BF15U6.ld
+        storageLayout:
+          RAM: []
+          ROM: []
+        useCustomScatterFile: true
+    uploadConfigMap:
+      JLink:
+        baseAddr: ""
+        bin: ""
+        cpuInfo:
+          cpuName: PY32F002Bx5
+          endor: Puya
+        otherCmds: ""
+        proType: 1
+        speed: 1000
+      OpenOCD:
+        baseAddr: "0x08000000"
+        bin: ""
+        interface: cmsis-dap
+        target: py32f002b
+      pyOCD:
+        baseAddr: "0x08000000"
+        bin: ""
+        config: .eide/debug.pyocd.yaml
+        otherCmds: '"--pack=${env:PYSDEPATH}/packs/PY32F0xx_DFP.pack"'
+        speed: 4M
+        targetName: PY32F002Bx5
+    uploader: pyOCD

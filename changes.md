@@ -34,3 +34,15 @@
 ### 修改
 - `SKILL.md` / `references/adapter-templates.md`：中断原语的移植方式改为**在 `mcu_cmsis.h` 中补齐 `__get_PRIMASK` / `__disable_irq` / `__set_PRIMASK` 的同名转接**，不再建议修改 `irq_lock.hpp`，保证 `utility` 层跨平台不分叉。
 - 删除"本工程已有一份 BSP 实现"这类依赖本工程范例的表述；改为平台无关的「板级驱动最小契约」（读 / 写 / 注册通知），并给出仅含声明的接口示意。
+
+## 0006 — 2026-10-17
+
+### 新增
+- `examples/py32f002b_start_kit/`：完整可编译的裸机范例（PY32F002Bx5、USART1 115200、EIDE 工程）。
+  - 演示 1ms tick 接入（`HAL_IncTick` → `timer::OnMilliSecondTick()`）、UART 中断接收 + `stream_buffer`、`queue` 事件循环、`Board` BSP 单例与 HAL 回调转发。
+  - 只保留本范例需要的 CMSIS / HAL 文件；`queue.hpp` 等直接引用仓库根目录（EIDE `incList` 中的 `../../..`），不复制库代码。
+- `.gitignore`：忽略构建产物与编辑器临时文件。
+
+### 修改
+- `README.md`：新增「范例工程」一节与目录结构说明。
+- `SKILL.md`：补充范例工程入口，说明其 BSP 实现仅作参考、换板仍按契约重写。

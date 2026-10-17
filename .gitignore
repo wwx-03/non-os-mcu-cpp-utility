@@ -1,0 +1,14 @@
+# 构建产物
+build/
+*.o
+*.d
+*.elf
+*.hex
+*.map
+*.su
+*.lst
+
+# 编辑器 / 系统
+.vs/
+.DS_Store
+Thumbs.db

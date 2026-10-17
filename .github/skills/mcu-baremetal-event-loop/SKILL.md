@@ -8,6 +8,8 @@ argument-hint: '要新增的外设 / 事件 / 定时任务，例如"加一个按
 
 本仓库是 header-only 的 C++17 工具库，配套一套固定的工程骨架。**只要工程引用了本仓库的头文件，新增代码就必须沿用下面的模式**，不要引入 RTOS、动态内存或另一套事件机制。
 
+仓库自带一个可直接编译烧录的完整范例 [`examples/py32f002b_start_kit/`](../../../examples/py32f002b_start_kit/README.md)，包含 1ms tick 接入、UART 中断接收、`Board` BSP 单例和 `Application` 事件循环的完整写法，可作为实现参考。注意其中的 `Board` / `Serial` 是**某块板子的 BSP 产物**，换板时仍要按本文契约重写，不要直接复制。
+
 ## 何时使用
 
 - 工程中包含 `queue.hpp` / `stream_buffer.hpp` / `timers.hpp` / `irq_lock.hpp`
@@ -183,3 +185,5 @@ private:
 ## 完整模板
 
 `Board` 契约、`Application` 事件循环、电平事件位图、`main()` 集成与检查清单在 [references/adapter-templates.md](./references/adapter-templates.md)。模板中的 `Serial` / `Timer` 只作为接口命名示意，**不要复制其实现**——那是某块板子的 BSP 产物。
+
+需要完整可运行的例子时，直接看仓库的 [`examples/py32f002b_start_kit/`](../../../examples/py32f002b_start_kit/README.md)：它把定时器、串口、BSP 和事件循环串成了一条可编译的链路。

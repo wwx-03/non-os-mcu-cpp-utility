@@ -11,6 +11,7 @@
 | `timers.hpp` | `timer`：静态链表软件定时器，支持周期/单次触发、启停、改周期 |
 | `irq_lock.hpp` | `irq_lock`：RAII 临界区（Cortex-M 用 `PRIMASK`） |
 | `.github/skills/` | Agent Skill：让 AI 按本仓库的模式生成代码 |
+| `examples/py32f002b_start_kit/` | 可直接编译烧录的完整范例工程（PY32F002B Start Kit） |
 
 所有容器与定时器都受 `irq_lock` 保护，可在主循环和中断之间安全共用；对象是静态的，不做任何堆分配。
 
@@ -78,6 +79,16 @@ int main()
 
 `timer` 的回调运行在 1ms 中断上下文，必须保持简短，只做"投递事件"这类操作。
 
+## 范例工程
+
+[`examples/py32f002b_start_kit/`](./examples/py32f002b_start_kit/README.md) 是一个完整、可编译烧录的工程（PY32F002Bx5，USART1 115200 8N1），演示整套模式：
+
+- 1ms tick：`HAL_IncTick` → `timer::OnMilliSecondTick()`；
+- UART 中断接收 → `stream_buffer` → BSP 回调 → `queue` → `Application` 事件循环；
+- `Board` 单例作为 BSP，独占 HAL 句柄与 HAL 弱回调。
+
+范例直接引用本仓库根目录的头文件（EIDE `incList` 中的 `../../..`），不复制一份库代码，因此始终与仓库版本一致。
+
 ## 工程模式
 
 本仓库配套的骨架是：**中断只投递事件 → `Application` 的事件循环统一派发 → 静态内存 → `irq_lock` 保护共享状态**。
@@ -140,9 +151,16 @@ non-os-mcu-cpp-utility/
 ├── irq_lock.hpp
 ├── changes.md                          # 变更记录
 ├── README.md
-└── .github/skills/mcu-baremetal-event-loop/
-    ├── SKILL.md
-    └── references/adapter-templates.md
+├── .gitignore
+├── .github/skills/mcu-baremetal-event-loop/
+│   ├── SKILL.md
+│   └── references/adapter-templates.md
+└── examples/py32f002b_start_kit/
+    ├── Core/
+    ├── Drivers/
+    ├── main/
+    ├── EIDE/
+    └── README.md
 ```
 
 ## 约束
