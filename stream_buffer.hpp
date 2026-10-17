@@ -107,7 +107,7 @@ private:
 	// 以下无锁版本仅供已持有锁的内部函数调用
 	size_t size_unlocked() const {
 		if (head_ >= tail_) {
-		return head_ - tail_;
+			return head_ - tail_;
 		}
 		return N - tail_ + head_;
 	}
