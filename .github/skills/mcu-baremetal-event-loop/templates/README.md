@@ -3,20 +3,24 @@
 本目录是**可复制的骨架**，不是完整可编译工程。复制到目标工程后，需要按该板的
 HAL 与引脚完成 `TODO` 标记的位置；完整可运行工程见 `examples/`。
 
+`.cpp` 模板统一带 `.txt` 后缀（复制时去掉）：这样把本仓库根目录加进 `srcDirs`
+的工程不会误把模板编译进去，避免 `Application` / `app_main` / `Board` 重复定义。
+
 | 模板 | 复制到 | 说明 |
 | --- | --- | --- |
 | `port/mcu_cmsis.h` | `<project>/port/mcu_cmsis.h` | 唯一的 MCU 依赖点，换成目标器件头 |
 | `app/application.hpp` | `<project>/app/application.hpp` | 事件循环单例与事件号（**Layered**） |
-| `app/application.cpp` | `<project>/app/application.cpp` | `Start(Board &)` 派发循环、`PostXxx()`、handler（**Layered**） |
+| `app/application.cpp.txt` | `<project>/app/application.cpp` | `Start(Board &)` 派发循环、`PostXxx()`、handler（**Layered**） |
 | `app/application_dip.hpp` | `<project>/app/application.hpp` | DIP/Hybrid 版声明：只依赖 `devices/board.hpp`，`Start(Board &)` |
+| `app/application_dip.cpp.txt` | `<project>/app/application.cpp` | DIP/Hybrid 版实现：通过抽象 `Board` 取器件接口 |
 | `bsp/board.hpp` | `<project>/bsp/board.hpp` | 板级资源与 HAL 回调入口 |
-| `bsp/board.cpp` | `<project>/bsp/board.cpp` | 单例、驱动对象、HAL 弱回调转发、1 ms tick |
+| `bsp/board.cpp.txt` | `<project>/bsp/board.cpp` | 单例、驱动对象、HAL 弱回调转发、1 ms tick |
 | `devices/led.hpp` | `<project>/devices/led.hpp` | 与 MCU 无关的 LED 抽象（NVI） |
 | `devices/button.hpp` | `<project>/devices/button.hpp` | 与 MCU 无关的按键消抖（NVI） |
 | `devices/board.hpp` | `<project>/devices/board.hpp` | 抽象 Board（**仅 DIP / Hybrid**） |
 | `bsp/gpio_led.hpp` | `<project>/bsp/gpio_led.hpp` | `Led` 的 GPIO 实现 |
 | `bsp/gpio_button.hpp` | `<project>/bsp/gpio_button.hpp` | `Button` 的 GPIO 实现 |
-| `bsp/board_example.cpp` | `<project>/bsp/<board>_board.cpp` | 具体板骨架：**类只在 .cpp 内定义**，末尾 `IMPLEMENT_BOARD_CLASS()` |
+| `bsp/board_example.cpp.txt` | `<project>/bsp/<board>_board.cpp` | 具体板骨架：**类只在 .cpp 内定义**，末尾 `IMPLEMENT_BOARD_CLASS()` |
 | `utility/pending_events.hpp` | `<project>/utility/pending_events.hpp` | 电平型事件位图 |
 
 > **Layered**：`bsp/board.hpp` + `bsp/board.cpp`（具体 `Board` 单例）。
@@ -28,15 +32,24 @@ HAL 与引脚完成 `TODO` 标记的位置；完整可运行工程见 `examples/
 1. 先选定架构模式（Layered / DIP / Hybrid），再填写
    [platform-profile.md](../references/platform-profile.md) 的平台契约；
 2. 复制 `port/`、`app/`、`bsp/`、`devices/`、`utility/`；
-   - Layered：用 `bsp/board.hpp` + `bsp/board.cpp`，删除 `devices/board.hpp`；
-   - DIP/Hybrid：用 `devices/board.hpp` + `bsp/board_example.cpp`（改名为
-     `bsp/<board>_board.cpp` 并按板重命名类），删除 `bsp/board.hpp` / `bsp/board.cpp` 单例模板；
+   - Layered：把 `bsp/board.cpp.txt` 复制成 `bsp/board.cpp`，用 `bsp/board.hpp`；
+     删除 `devices/board.hpp`、`app/application_dip.hpp`、`app/application_dip.cpp.txt`；
+   - DIP/Hybrid：把 `bsp/board_example.cpp.txt` 复制成 `bsp/<board>_board.cpp` 并按板重命名类，
+     用 `devices/board.hpp`；删除 `bsp/board.hpp` / `bsp/board.cpp`
+     单例模板；`app/` 用 `application_dip.hpp` + `application_dip.cpp.txt` 替换 Layered 的两个文件；
 3. 把 `board_hal.h` 换成目标厂商 HAL 头（例如 `stm32f4xx_hal.h`），按板子重写板级初始化；
 4. 按 [toolchains.md](../references/toolchains.md) 配置工程，并用实际工具链编译；
 5. 按 [bring-up.md](../checklists/bring-up.md) 逐项核对。
 
 DIP/Hybrid 的选板方式：`devices/board.hpp` 声明 `create_new_board()`，
 具体板 `.cpp` 末尾用 `IMPLEMENT_BOARD_CLASS(<BoardClass>)` 提供唯一实现。
+
+DIP/Hybrid 下 `Application` 只 include `devices/board.hpp`，通过抽象 `Board` 的
+`GetXxx()` 取器件接口；需要串口等 BSP 驱动时，先在 `devices/` 定义对应接口，再由具体板实现。
+
+为此 DIP/Hybrid 的 `incList` 要包含工程根目录（EIDE 里是 `..`）与 `devices/`：
+`app/` 写 `#include "devices/board.hpp"`，`bsp/` 写 `#include "bsp/gpio_led.hpp"`；
+`app/` 源码不出现 `bsp/`。
 
 - 只编译一个 `bsp/*_board.cpp`；编进两个会链接期重复符号；
 - 一个都没编会 undefined reference；

@@ -64,11 +64,16 @@ targets:
         - ../Drivers/CMSIS/Device/PY32F0xx/Include
         - ../app
         - ../bsp
+        - ../devices
         - ../non-os-mcu-cpp-utility
         - ../port
 ```
 
 `../port` 不能漏：`irq_lock.hpp` 通过它找到 `mcu_cmsis.h`。
+
+`incList` 里的 `../devices` 服务于 `devices/` 层。DIP / Hybrid 还要额外加工程根目录 `..`：
+这样 `app/` 可以写 `#include "devices/board.hpp"`，`bsp/*.cpp` 可以写
+`#include "bsp/gpio_led.hpp"`。`app/` 的源码不得 `#include "bsp/...`，由目录规则与 CI 检查保证。
 
 ### 1.4 编译与链接选项（AC6 / Keil armclang）
 
@@ -170,6 +175,7 @@ targets:
         - ../Drivers/CMSIS/Device/PY32F0xx/Include
         - ../app
         - ../bsp
+        - ../devices
         - ../non-os-mcu-cpp-utility
         - ../port
     excludeList:
@@ -237,6 +243,7 @@ targets:
         - ../Drivers/CMSIS/Include
         - ../app
         - ../bsp
+        - ../devices
         - ../non-os-mcu-cpp-utility
         - ../port
     excludeList:
@@ -364,7 +371,7 @@ targets:
 armclang --target=arm-arm-none-eabi -mcpu=cortex-m4 -mfpu=fpv4-sp-d16 -mfloat-abi=hard `
   -c -std=c++17 -fno-exceptions -fno-rtti -DUSE_HAL_DRIVER -DSTM32F407xx `
   -I../Core/Inc -I../Drivers/CMSIS/Include -I../Drivers/STM32F4xx_HAL_Driver/Inc `
-  -I../app -I../bsp -I../non-os-mcu-cpp-utility -I../port `
+  -I../app -I../bsp -I../devices -I../non-os-mcu-cpp-utility -I../port `
   ../app/application.cpp -o application.o
 ```
 
@@ -376,7 +383,7 @@ armclang --target=arm-arm-none-eabi -mcpu=cortex-m4 -mfpu=fpv4-sp-d16 -mfloat-ab
 arm-none-eabi-g++ -std=c++17 -fno-exceptions -fno-rtti -Wno-register `
   -mcpu=cortex-m0plus -mthumb -DPY32F002Bx5 -DUSE_HAL_DRIVER `
   -I../Core/INC -I../Drivers/CMSIS/Include -I../Drivers/PY32F002B_HAL_Driver/Inc `
-  -I../Drivers/CMSIS/Device/PY32F0xx/Include -I../app -I../bsp `
+  -I../Drivers/CMSIS/Device/PY32F0xx/Include -I../app -I../bsp -I../devices `
   -I../non-os-mcu-cpp-utility -I../port `
   -c ../app/application.cpp -o application.o
 ```

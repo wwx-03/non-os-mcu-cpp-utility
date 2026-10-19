@@ -21,6 +21,16 @@
 
 namespace {
 
+// 引脚定义只属于这块板：换板时整段替换
+namespace gpio {
+GPIO_TypeDef *const LED_RED_PORT = GPIOF;   // TODO: 换成实际端口
+constexpr uint16_t LED_RED_PIN = GPIO_PIN_9;
+GPIO_TypeDef *const LED_GREEN_PORT = GPIOF;
+constexpr uint16_t LED_GREEN_PIN = GPIO_PIN_10;
+GPIO_TypeDef *const BUTTON0_PORT = GPIOA;
+constexpr uint16_t BUTTON0_PIN = GPIO_PIN_0;
+}  // namespace gpio
+
 class BoardExample final : public Board {
 public:
 	BoardExample();
@@ -31,16 +41,14 @@ public:
 
 	Led *GetLed(size_t index) override;
 	Button *GetButton(size_t index) override;
-	Network *GetNetwork() override { return &network_; }
 
-	// 板级专用能力：不放进抽象 Board
-	void RefreshWatchdog();
+	// 板级专用能力：不放进抽象 Board；目标板没有看门狗时删除本方法与对应定时任务
+	[[maybe_unused]] void RefreshWatchdog();
 
 private:
 	GpioLed led_red_;
 	GpioLed led_green_;
 	GpioButton button0_;
-	Network network_;
 };
 
 BoardExample::BoardExample()

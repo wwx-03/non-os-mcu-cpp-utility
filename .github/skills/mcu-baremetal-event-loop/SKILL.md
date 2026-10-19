@@ -77,7 +77,7 @@ argument-hint: '目标 MCU/工具链 + 要新增的外设 / 事件 / 定时任�
 2. 替换 `port/mcu_cmsis.h` 的器件头；确认平台提供 `__get_PRIMASK` / `__disable_irq` / `__set_PRIMASK`，缺失时在该头里补齐转接。
 3. 按**已选架构模式**生成 Board：
    - **Layered**：重写 `bsp/board.*`，保持具体 `Board` 单例与"读 / 写 / 注册通知"契约；
-     `app/application.cpp` 通过 `Board::GetInstance()` 取资源。
+     `app/application.cpp` 通过 `Start(Board &)` 注入的引用取资源（内部保存 `Board *board_`）。
    - **DIP / Hybrid**：新增 `devices/board.hpp`（抽象 `Board` + 工厂 + `IMPLEMENT_BOARD_CLASS` 宏）、
      `bsp/<board_name>_board.cpp`（`<MCU><BoardName><Version>Board` 只在该 .cpp 内定义，
      末尾 `IMPLEMENT_BOARD_CLASS(<BoardClass>)`）；
@@ -338,7 +338,8 @@ Application::GetInstance().Start(Board::GetInstance());
 3. 在 1 ms 中断里调用一次 `timer::OnMilliSecondTick()`。
 
 > 本仓库是 header-only，加入工程的 **include 路径**即可。若必须加入 `srcDirs`，
-> 用 `excludeList` 排除 `examples/**`，否则范例的 `.cpp` 会被重复编译。
+> 用 `excludeList` 排除 `examples/**`，否则范例的 `.cpp` 会被重复编译；
+> `templates/` 的 `.cpp` 已用 `.txt` 后缀，不会被扫描。
 
 ## Application：事件循环与投递
 
@@ -368,7 +369,8 @@ Application::GetInstance().Start(Board::GetInstance());
 两种模式在 `main()` 里写法一致：`Board::GetInstance()` 返回具体板（Layered）
 或抽象接口（DIP/Hybrid），`Application` 都只看到 `Board &`。
 
-`Application` 内部只保存 `Board *board_` 并通过它取资源，**不 include `bsp/`**。
+`Application` 内部只保存 `Board *board_` 并通过它取资源：Layered 下 `app` 可以
+include `bsp/board.hpp`，DIP / Hybrid 下只 include `devices/board.hpp`。
 
 事件从产生到处理的完整链路只有一条：
 

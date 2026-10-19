@@ -23,7 +23,8 @@ GpioLed green_led(GREEN_LED_PORT, GREEN_LED_PIN, false);
 GpioButton button0(BUTTON0_PORT, BUTTON0_PIN, true);   // 按下为高电平（WK_UP 风格）
 }
 
-Board::Board() {
+Board::Board()
+	: serial_(&huart1) {
 	__HAL_RCC_GPIOF_CLK_ENABLE();
 
 	GPIO_InitTypeDef init = {};
@@ -74,8 +75,7 @@ void Board::RefreshWatchdog() {
 }
 
 Serial<Board::SERIAL1_RX_SIZE, Board::SERIAL1_TX_SIZE> *Board::GetSerial() {
-	static Serial<SERIAL1_RX_SIZE, SERIAL1_TX_SIZE> serial(&huart1);
-	return &serial;
+	return &serial_;
 }
 
 extern "C" void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart) {

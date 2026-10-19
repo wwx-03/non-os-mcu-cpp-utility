@@ -21,7 +21,7 @@
 
 把本目录加入工程的 include 路径（EIDE 的 `incList`）即可，不需要编译任何 `.cpp`。
 
-也可以把本目录加进 EIDE 的 `srcDirs`，方便在工程树里浏览头文件；但**必须同时用 `excludeList` 排除 `examples/**`**，否则范例的 `.cpp` 会被重复编译。各字段的取值见 [toolchains.md](./.github/skills/mcu-baremetal-event-loop/references/toolchains.md)。
+也可以把本目录加进 EIDE 的 `srcDirs`，方便在工程树里浏览头文件；但**必须同时用 `excludeList` 排除 `examples/**`**，否则范例的 `.cpp` 会被重复编译。`templates/` 里的 `.cpp` 模板统一带 `.txt` 后缀，不会被 `srcDirs` 扫描，复制到工程时再去掉后缀。各字段的取值见 [toolchains.md](./.github/skills/mcu-baremetal-event-loop/references/toolchains.md)。
 
 ### 2. 提供 MCU 桥接头（唯一的移植点）
 
@@ -90,19 +90,20 @@ int main()
 | [`examples/stm32f407_start_kit/`](./examples/stm32f407_start_kit/README.md) | STM32F407ZGTx | Keil **AC6（armclang）**：`MDK-ARM/*.uvprojx` + EIDE（`toolchain: AC6`） |
 | [`examples/py32f002b_start_kit/`](./examples/py32f002b_start_kit/README.md) | PY32F002Bx5 | **GCC**（arm-none-eabi）：EIDE + `.ld` 链接脚本 |
 
-两者演示同一套模式：
+两者演示同一套模式（**Layered**）：
 
 - 1ms tick：`HAL_IncTick` → `timer::OnMilliSecondTick()`；
 - UART 中断接收 → `stream_buffer` → BSP 回调 → `queue` → `Application` 事件循环；
-- `Board` 单例作为 BSP，独占 HAL 句柄与 HAL 弱回调。
+- `Board` 单例作为 BSP，独占 HAL 句柄与 HAL 弱回调；
+- `app_main()` 调用 `Application::GetInstance().Start(Board::GetInstance())`，`Application` 内部只保存注入的 `Board *board_`，handler 通过它取资源。
 
-范例直接引用本仓库根目录的头文件（EIDE `incList` 中的 `../../..`），不复制一份库代码，因此始终与仓库版本一致。目录按 `app/`（应用）、`bsp/`（板级）、`port/`（MCU 桥接）分层，可直接作为新工程的模板：Keil / MDK-ARM 导入的工程用 `stm32f407_start_kit`，GCC 工程用 `py32f002b_start_kit`。
+范例直接引用本仓库根目录的头文件（EIDE `incList` 中的 `../../..`），不复制一份库代码，因此始终与仓库版本一致。目录按 `app/`（应用）、`bsp/`（板级）、`devices/`（器件抽象，可选）、`port/`（MCU 桥接）分层，可直接作为新工程的模板：Keil / MDK-ARM 导入的工程用 `stm32f407_start_kit`，GCC 工程用 `py32f002b_start_kit`。需要 DIP / Hybrid 时按 [examples/README.md](./examples/README.md) 的四步改造。
 
 ## 工程模式
 
 本仓库配套的骨架是：**中断只投递事件 → `Application` 的事件循环统一派发 → 静态内存 → `irq_lock` 保护共享状态**。
 
-- **Application**：全工程唯一的事件循环，也是唯一持有事件队列的地方。所有中断通过 `PostXxx()` 投递，`Start(Board &)` 里 `pop` 后按事件号派发到 handler。**必须用 `GetInstance()` 单例**。
+- **Application**：全工程唯一的事件循环，也是唯一持有事件队列的地方。所有中断通过 `PostXxx()` 投递，`Start(Board &)` 里 `pop` 后按事件号派发到 handler；`Application` 保存注入的 `Board *board_`，handler 通过它取资源，BSP 回调在构造函数里、开中断前注册。**必须用 `GetInstance()` 单例**。
 - **BSP（Board）**：全工程唯一接触 HAL 的地方，一块板子一份实现。负责持有 HAL 句柄、构造板级资源、独占并转发 HAL 回调；驱动只上报"有数据/有事件"，不解析协议。
 - **驱动（Serial、Timer 等）**：属于具体板子的 BSP，本仓库**不提供**。换板时按新硬件与 HAL 能力重写，保持接口语义即可。
 - **器件抽象（devices）**：与 MCU 无关的行为模型（`Led`、`Button`…），只描述"是什么"，不碰引脚与 HAL；具体实现由 `bsp/` 继承并提供。
@@ -126,7 +127,7 @@ DIP / Hybrid 的固定写法：
 - 抽象 `Board` 提供 `GetInstance()`，内部转调 `create_new_board()`；
 - 具体板类只在 `bsp/<board>_board.cpp` 里定义（**不写 `.hpp`**），文件末尾用 `IMPLEMENT_BOARD_CLASS()` 注册；
 - 选板 = 构建时只编译一个板级 `.cpp`（多个 → 重复符号，缺失 → undefined reference）；
-- `main()` 写成 `Application::GetInstance().Start(Board::GetInstance())`；
+- `main()` 写成 `Application::GetInstance().Start(Board::GetInstance())`（Layered 与 DIP 写法一致）；
 - 板级专用能力（喂狗、板号、自检）留在具体板，不上抽象接口；
 - `app/` 不 include `bsp/`，构建期用 include 路径隔离强制。
 

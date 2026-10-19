@@ -123,3 +123,41 @@
 - 新增 `templates/`：`port/mcu_cmsis.h`、`app/application.*`、`bsp/board.*`、`devices/led.hpp`、`devices/button.hpp`、`bsp/gpio_led.hpp`、`bsp/gpio_button.hpp`、`utility/pending_events.hpp` 及复制说明。
 - 新增 `checklists/bring-up.md`：移植、事件链路、内存并发、分层、工程配置与上板验证清单。
 - 更新 `README.md`：补充 references / templates / checklists 说明与目录结构，链接改到新的 reference 文件。
+
+## 0013 — 2026-10-20
+
+### 新增
+- `templates/app/application_dip.cpp.txt`：DIP / Hybrid 版的 Application 实现，与
+  `application_dip.hpp` 配套，只依赖 `devices/board.hpp` + `devices/button.hpp`。
+
+### 修改
+- 两个范例的 `Application` 统一改为 `Start(Board &board)`：内部保存注入的 `Board *board_`，
+  handler 一律通过 `board_` 取资源，不再在业务代码里调用 `Board::GetInstance()`；
+  `app_main()` 改为 `Application::GetInstance().Start(Board::GetInstance())`。
+  构造函数仍在开中断前通过 `Board::GetInstance()` 注册 BSP 回调并投递起始事件。
+- 范例 `Board` 的串口驱动从 `GetSerial()` 内的函数内 `static` 改为 `Board` 成员，
+  在 `Board` 构造时初始化，消除 `__cxa_guard` 与"ISR 首次访问才构造外设"的风险。
+- `stm32f407_start_kit` 的秒计数从 `HandleTimerElapsed()` 内的函数内 `static` 改为 `Application` 成员。
+- `templates/app/application.hpp` / `application.cpp.txt`：补上 `Board *board_` 并在 `Start()` 中接收注入；
+  handler 改用 `board_`，与范例保持一致。
+- `templates/devices/board.hpp`、`templates/bsp/board_example.cpp.txt`：移除未定义的 `Network`
+  占位，补齐板级 GPIO 常量示例，使 DIP/Hybrid 骨架自洽。
+- 模板中的 `.cpp` 统一改名为 `.cpp.txt`：把仓库根目录加入 `srcDirs` 的工程（如本仓库的
+  宿主工程）不会再把 `Application` / `app_main` / `Board` 的模板实现误编译进去；
+  `templates/README.md` 同步说明复制时去掉 `.txt`。
+- `templates/README.md`：补充 DIP/Hybrid 使用 `application_dip.hpp` + `application_dip.cpp.txt`、
+  以及 `incList` 需包含工程根目录与 `devices/` 的说明。
+
+### 文档
+- `README.md`、`examples/README.md` 与两个范例的 README：写明两个范例都采用 **Layered**，
+  补充 `Start(Board &)` 注入、`board_` 取资源的调用链，以及改造为 DIP / Hybrid 的四步流程。
+- `SKILL.md`、`references/adapter-templates.md`：明确 Layered 下 `Application` 通过
+  `Start(Board &)` 注入的引用取资源，与模板和范例保持一致。
+
+### 验证
+- `stm32f407_start_kit`：EIDE **AC6** 完整构建并链接通过（ROM 19.1 KB / RAM 4.2 KB）。
+- `py32f002b_start_kit`：EIDE **GCC** 完整构建并链接通过（FLASH 7.7 KB / RAM 1.8 KB）。
+- 两个范例的 `app/application.cpp`、`bsp/board.cpp` 另用 `-Wall -Wextra -Werror` 单独编译通过。
+- 模板 `application.cpp.txt`、`application_dip.cpp.txt`、`board_example.cpp.txt` 用 GCC 做过编译验证
+  （`board_example` 配桩 HAL）。
+- 宿主工程的等价构建（源列表剔除模板文件）通过；模板改名后 `srcDirs` 扫描不会再命中它们。

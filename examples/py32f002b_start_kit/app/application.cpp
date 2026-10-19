@@ -1,7 +1,8 @@
 #include "application.hpp"
 #include "board.hpp"
 
-Application::Application() {
+Application::Application()
+	: board_(&Board::GetInstance()) {
 	tick_timer_.create(1000, true, +[](void *ctx) {
 		static_cast<Application *>(ctx)->PostEvent(TIMER_ELAPSED_EVENT);
 	}, this);
@@ -11,7 +12,7 @@ Application::Application() {
 		static_cast<Application *>(ctx)->PostEvent(WATCHDOG_REFRESH_EVENT);
 	}, this);
 
-	auto *serial = Board::GetInstance().GetSerial();
+	auto *serial = board_->GetSerial();
 	serial->SetSpecificCharactersCallback('\n', +[](size_t size, void *ctx) {
 		static_cast<Application *>(ctx)->PostSerialReceivedEvent(size);
 	}, this);
@@ -23,7 +24,9 @@ Application::Application() {
 	PostEvent(START_EVENT);
 }
 
-void Application::Start() {
+void Application::Start(Board &board) {
+	board_ = &board;
+
 	QueueItem item = {};
 	while (true) {
 		if (!queue_.pop(item)) {
@@ -68,25 +71,24 @@ void Application::PostSerialReceivedEvent(const size_t size) {
 void Application::HandleStart() {
 	tick_timer_.start();
 	watchdog_timer_.start();
-	Board::GetInstance().RefreshWatchdog();
+	board_->RefreshWatchdog();
 }
 
 void Application::HandleSerialReceived(const QueueItem &item) {
-	auto *serial = Board::GetInstance().GetSerial();
+	auto *serial = board_->GetSerial();
 	uint8_t buffer[128] = {};
 	size_t n = serial->Read(buffer, item.data.serial_received.size);
 	serial->Write(buffer, n);
 }
 
 void Application::HandleTimerElapsed() {
-	auto *serial = Board::GetInstance().GetSerial();
-	serial->Write("seconds elapsed\r\n", sizeof("seconds elapsed\r\n") - 1);
+	board_->GetSerial()->Write("seconds elapsed\r\n", sizeof("seconds elapsed\r\n") - 1);
 }
 
 void Application::HandleWatchdogRefresh() {
-	Board::GetInstance().RefreshWatchdog();
+	board_->RefreshWatchdog();
 }
 
 extern "C" void app_main(void) {
-	Application::GetInstance().Start();
+	Application::GetInstance().Start(Board::GetInstance());
 }

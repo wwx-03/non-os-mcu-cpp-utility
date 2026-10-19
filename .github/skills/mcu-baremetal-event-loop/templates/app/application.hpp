@@ -45,6 +45,8 @@ private:
 
 	queue<QueueItem, QUEUE_LENGTH> queue_;
 	timer tick_timer_;
+	// 只保存注入进来的板级接口；具体类型由 main() 决定
+	Board *board_ = nullptr;
 	volatile uint32_t dropped_ = 0;
 
 	Application();

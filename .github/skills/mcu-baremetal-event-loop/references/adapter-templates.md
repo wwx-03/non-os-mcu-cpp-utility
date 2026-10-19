@@ -48,7 +48,7 @@
 `Board` 的形态由架构模式决定（见 SKILL.md「架构模式」）：
 
 - **Layered**：具体 `Board` 同为"私有构造 + 函数内 `static` 实例 + `GetInstance()`"；
-  `Application` 内部通过 `Board::GetInstance()` 取资源。
+  `Application` 通过 `Start(Board &)` 注入的引用取资源（内部保存 `Board *board_`）。
 - **DIP / Hybrid**：抽象 `Board` 提供 `GetInstance()`，内部转调 `create_new_board()`；
   具体板 `<MCU><BoardName><Version>Board` **只在 `bsp/<board>_board.cpp` 内定义**，
   末尾 `IMPLEMENT_BOARD_CLASS(<BoardClass>)` 提供唯一实现。
@@ -94,7 +94,7 @@
 - 回调名必须与实际 API 匹配（`HAL_UART_Receive_IT` → `HAL_UART_RxCpltCallback`）。
 
 代码骨架见 [templates/bsp/board.hpp](../templates/bsp/board.hpp) 与
-[templates/bsp/board.cpp](../templates/bsp/board.cpp)。
+[templates/bsp/board.cpp.txt](../templates/bsp/board.cpp.txt)。
 
 ## 4. Application：事件循环契约
 
@@ -129,7 +129,7 @@ handler 内再次 `PostXxx()` 是允许的，但不要形成自激循环；主�
 `PostXxx()` 进入，不要直接调用 `HandleXxx()`。
 
 代码骨架见 [templates/app/application.hpp](../templates/app/application.hpp) 与
-[templates/app/application.cpp](../templates/app/application.cpp)。
+[templates/app/application.cpp.txt](../templates/app/application.cpp.txt)。
 
 ## 5. main() 集成
 

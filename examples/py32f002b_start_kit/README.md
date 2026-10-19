@@ -5,7 +5,11 @@
 - 1ms SysTick → `timer::OnMilliSecondTick()`，驱动静态链表软件定时器；
 - UART1 中断接收 → `stream_buffer` 缓冲 → BSP 回调通知；
 - `queue` 事件队列 + `Application` 单例事件循环派发；
-- `Board` 单例作为 BSP，独占 HAL 句柄与 HAL 弱回调。
+- `Board` 单例作为 BSP，独占 HAL 句柄与 HAL 弱回调；
+- `Application::Start(Board &)` 注入板级接口，handler 通过 `board_` 取资源；构造函数只在开中断前注册回调。
+
+本范例采用 **Layered** 架构（单板、器件固定）。需要 DIP / Hybrid（抽象 `Board` +
+`IMPLEMENT_BOARD_CLASS()`）时，按 [examples/README.md](../README.md#架构模式layered--dip--hybrid) 的步骤改造。
 
 ## 硬件与现象
 
@@ -54,13 +58,13 @@ examples/py32f002b_start_kit/
 
 ## 代码导读（一条完整调用链）
 
-1. `Core/SRC/main.c`：初始化时钟与外设，最后调用 `app_main()`。
+1. `Core/SRC/main.c`：初始化时钟与外设，最后调用 `app_main()`；`app_main()` 里调用 `Application::GetInstance().Start(Board::GetInstance())`。
 2. `app/application.cpp`
-   - 构造函数：创建 1000 ms 周期 `timer`、注册 BSP 通知回调、投递 `START_EVENT`；
+   - 构造函数：创建 1000 ms 周期 `timer`、通过 `Board::GetInstance()` 注册 BSP 通知回调、投递 `START_EVENT`；
    - 另有一个 100 ms `timer` 投递 `WATCHDOG_REFRESH_EVENT`，在事件循环里喂 IWDG（本工程的 IWDG 约 512 ms 溢出）；
-   - `Start()`：全工程唯一的事件循环，`pop` → `switch` → `HandleXxx()`。
+   - `Start(Board &board)`：保存注入的 `board_`，然后进入全工程唯一的事件循环，`pop` → `switch` → `HandleXxx()`；handler 一律通过 `board_` 取资源。
 3. `bsp/board.cpp`
-   - `Board::GetInstance()` 单例，持有 UART 驱动对象，并暴露 `RefreshWatchdog()`；
+   - `Board::GetInstance()` 单例，持有 UART 驱动对象（`Board` 成员，构造时初始化，不用函数内 `static`），并暴露 `RefreshWatchdog()`；
    - `HAL_UART_RxCpltCallback` / `HAL_UART_ErrorCallback` 只把事件转给 `Serial`，与 `HAL_UART_*` API 匹配；
    - `HAL_IncTick` 里调用 `timer::OnMilliSecondTick()` —— 这就是 1ms tick 的唯一接入点。
 4. `bsp/serial.hpp`：1 字节中断接收 + `stream_buffer` + `HAL_UART_Transmit_IT` 非阻塞发送。

@@ -5,7 +5,12 @@
 - 1ms SysTick → `timer::OnMilliSecondTick()`，驱动静态链表软件定时器；
 - USART1 中断接收 → `stream_buffer` 缓冲 → BSP 回调通知；
 - `queue` 事件队列 + `Application` 单例事件循环派发；
-- `Board` 单例作为 BSP，独占 HAL 句柄与 HAL 弱回调。
+- `Board` 单例作为 BSP，独占 HAL 句柄与 HAL 弱回调；
+- `Application::Start(Board &)` 注入板级接口，handler 通过 `board_` 取资源；构造函数只在开中断前注册回调。
+
+本范例采用 **Layered** 架构（单板、器件固定），也是仓库两个范例共同的默认模式。
+需要 DIP / Hybrid（抽象 `Board` + `IMPLEMENT_BOARD_CLASS()`）时，按
+[examples/README.md](../README.md#架构模式layered--dip--hybrid) 的步骤改造。
 
 ## 硬件与现象
 
@@ -64,13 +69,13 @@ EIDE 首次构建时会根据 `eide.yml` 生成 `build/Debug/builder.params` 与
 
 ## 代码导读（一条完整调用链）
 
-1. `Core/Src/main.c`：`HAL_Init()` → `SystemClock_Config()` → 外设初始化 → `app_main()`。
+1. `Core/Src/main.c`：`HAL_Init()` → `SystemClock_Config()` → 外设初始化 → `app_main()`；`app_main()` 里调用 `Application::GetInstance().Start(Board::GetInstance())`，此时外设已初始化、单例在进入事件循环前完成构造。
 2. `app/application.cpp`
-   - 构造函数：创建 1000 ms `tick_timer_`、100 ms 喂狗定时器、250 ms 闪灯定时器，注册 BSP 通知回调（串口收满 / 按键释放），投递 `START_EVENT`；
+   - 构造函数：创建 1000 ms `tick_timer_`、100 ms 喂狗定时器、250 ms 闪灯定时器，通过 `Board::GetInstance()` 注册 BSP 通知回调（串口收满 / 按键释放），投递 `START_EVENT`；
    - 按键回调只调用 `PostButtonReleasedEvent()`，业务在 `HandleButtonReleased()` 里输出 `Button0 released`；
-   - `Start()`：全工程唯一的事件循环，`pop` → `switch` → `HandleXxx()`。
+   - `Start(Board &board)`：保存注入的 `board_`，然后进入全工程唯一的事件循环，`pop` → `switch` → `HandleXxx()`；handler 一律通过 `board_` 取资源。
 3. `bsp/board.cpp`
-   - `Board::GetInstance()` 单例，持有 UART 驱动、两个 `GpioLed` 与一个 `GpioButton`，并暴露 `RefreshWatchdog()`；
+   - `Board::GetInstance()` 单例，持有 UART 驱动（`Board` 成员，构造时初始化，不用函数内 `static`）、两个 `GpioLed` 与一个 `GpioButton`，并暴露 `RefreshWatchdog()`；
    - `Board` 构造函数里使能 GPIOF 时钟、`HAL_GPIO_Init` PF9/PF10（输出）与 PA0（输入下拉），随后确定 LED 初始电平并 `button0.Start()` 建立采样基线；
    - `HAL_UART_RxCpltCallback` / `HAL_UART_ErrorCallback` 只把事件转给 `Serial`；
    - `HAL_IncTick` 里调用 `timer::OnMilliSecondTick()` —— 1ms tick 的唯一接入点。

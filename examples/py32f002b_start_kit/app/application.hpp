@@ -6,6 +6,8 @@
 #include "queue.hpp"
 #include "timers.hpp"
 
+class Board;
+
 // 应用层：全工程唯一的事件循环（单例）。
 // 中断只通过 PostXxx() 投递事件，业务全部在 Start() 的派发循环里处理。
 class Application {
@@ -18,7 +20,8 @@ public:
 	Application(const Application &) = delete;
 	Application &operator=(const Application &) = delete;
 
-	void Start();
+	// Layered / DIP 统一签名：Layered 传具体 Board，DIP 传抽象 Board 的引用
+	void Start(Board &board);
 
 private:
 	static constexpr size_t QUEUE_LENGTH = 16;
@@ -40,6 +43,7 @@ private:
 	queue<QueueItem, QUEUE_LENGTH> queue_;
 	timer tick_timer_;
 	timer watchdog_timer_;
+	Board *board_ = nullptr;
 	volatile uint32_t dropped_ = 0;
 
 	Application();

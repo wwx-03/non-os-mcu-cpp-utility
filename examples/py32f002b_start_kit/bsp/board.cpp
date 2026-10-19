@@ -5,9 +5,11 @@
 
 #include "timers.hpp"
 
+Board::Board()
+	: serial_(&husart1) {}
+
 Serial<128, 128> *Board::GetSerial() {
-	static Serial<128, 128> serial(&husart1);
-	return &serial;
+	return &serial_;
 }
 
 void Board::RefreshWatchdog() {

@@ -12,7 +12,6 @@
 
 class Button;
 class Led;
-class Network;
 class Board;
 
 // 由具体板的 .cpp 通过 IMPLEMENT_BOARD_CLASS() 提供。
@@ -34,7 +33,7 @@ public:
 
 	virtual Led *GetLed(size_t index) = 0;
 	virtual Button *GetButton(size_t index) = 0;
-	virtual Network *GetNetwork() = 0;
+	// 需要网络、存储等复杂模块时再加 GetXxx()，返回对应的 devices 接口
 
 protected:
 	// 子类只能通过基类构造；声明拷贝构造会抑制隐式默认构造，必须显式保留

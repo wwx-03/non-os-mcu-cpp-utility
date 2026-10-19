@@ -1,0 +1,80 @@
+// DIP / Hybrid 版实现：与 application_dip.hpp 配套。
+// 与 Layered 版的区别：只 include devices/board.hpp，通过抽象 Board 取器件接口。
+#include "application.hpp"   // 由 application_dip.hpp 复制并改名而来
+
+#include "devices/board.hpp"
+#include "devices/button.hpp"
+
+Application::Application()
+	: board_(&Board::GetInstance()) {
+	// 定时器回调运行在 1ms 中断里：只投递事件
+	tick_timer_.create(1000, true, +[](void *ctx) {
+		static_cast<Application *>(ctx)->PostEvent(EVT_TICK);
+	}, this);
+
+	// 器件回调同样运行在中断上下文：只投递事件
+	board_->GetButton(0)->SetReleasedCallback(+[](void *ctx) {
+		static_cast<Application *>(ctx)->PostKey(0);
+	}, this);
+
+	PostEvent(EVT_START);   // 初始事件：主循环启动后第一个处理
+}
+
+void Application::Start(Board &board) {
+	board_ = &board;
+
+	QueueItem item = {};
+	while (true) {
+		if (!queue_.pop(item)) {
+			continue;   // 需要省电时改为 __WFI()：SysTick 每 1ms 唤醒一次
+		}
+
+		switch (item.event) {
+		case EVT_START:
+			HandleStart();
+			break;
+		case EVT_TICK:
+			HandleTick();
+			break;
+		case EVT_KEY:
+			HandleKey(item);
+			break;
+		default:
+			break;
+		}
+	}
+}
+
+void Application::PostEvent(const uint32_t event) {
+	QueueItem item = {};
+	item.event = event;
+	if (!queue_.push(item)) {
+		++dropped_;
+	}
+}
+
+void Application::PostKey(const uint8_t index) {
+	QueueItem item = {};
+	item.event = EVT_KEY;
+	item.data.key.index = index;
+	if (!queue_.push(item)) {
+		++dropped_;
+	}
+}
+
+void Application::HandleStart() {
+	tick_timer_.start();
+}
+
+void Application::HandleTick() {
+	// TODO: 周期业务；需要板级资源时通过 board_->GetXxx() 获取
+}
+
+void Application::HandleKey(const QueueItem &item) {
+	(void)item;   // TODO: 按键业务
+}
+
+extern "C" void app_main(void) {
+	// DIP/Hybrid：Board::GetInstance() 返回抽象接口，具体板由 IMPLEMENT_BOARD_CLASS 注册
+	Application::GetInstance().Start(Board::GetInstance());
+}

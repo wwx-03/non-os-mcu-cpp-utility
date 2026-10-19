@@ -2,7 +2,8 @@
 
 #include "board.hpp"
 
-Application::Application() {
+Application::Application()
+	: board_(&Board::GetInstance()) {
 	tick_timer_.create(1000, true, +[](void *ctx) {
 		static_cast<Application *>(ctx)->PostEvent(TIMER_ELAPSED_EVENT);
 	}, this);
@@ -17,7 +18,7 @@ Application::Application() {
 		static_cast<Application *>(ctx)->PostEvent(BLINK_EVENT);
 	}, this);
 
-	auto *serial = Board::GetInstance().GetSerial();
+	auto *serial = board_->GetSerial();
 
 	serial->SetSpecificCharactersCallback('\n', +[](size_t size, void *ctx) {
 		static_cast<Application *>(ctx)->PostSerialReceivedEvent(size);
@@ -28,7 +29,7 @@ Application::Application() {
 	}, this);
 
 	// 按键回调运行在 1ms tick 中断里，这里只投递事件
-	Board::GetInstance().GetButton(Board::BUTTON0_INDEX)->SetReleasedCallback(
+	board_->GetButton(Board::BUTTON0_INDEX)->SetReleasedCallback(
 		+[](void *ctx) {
 			static_cast<Application *>(ctx)->PostButtonReleasedEvent(
 				static_cast<uint8_t>(Board::BUTTON0_INDEX));
@@ -38,7 +39,9 @@ Application::Application() {
 	PostEvent(START_EVENT);
 }
 
-void Application::Start() {
+void Application::Start(Board &board) {
+	board_ = &board;
+
 	QueueItem item = {};
 	while (true) {
 		if (!queue_.pop(item)) {
@@ -100,11 +103,11 @@ void Application::HandleStart() {
 	tick_timer_.start();
 	watchdog_timer_.start();
 	blink_timer_.start();
-	Board::GetInstance().RefreshWatchdog();
+	board_->RefreshWatchdog();
 }
 
 void Application::HandleSerialReceived(const QueueItem &item) {
-	auto *serial = Board::GetInstance().GetSerial();
+	auto *serial = board_->GetSerial();
 	uint8_t buffer[128] = {};
 	size_t size = item.data.serial_received.size;
 	if (size > sizeof(buffer)) {
@@ -115,25 +118,22 @@ void Application::HandleSerialReceived(const QueueItem &item) {
 }
 
 void Application::HandleTimerElapsed() {
-	static uint32_t seconds = 0;
-	++seconds;
+	++seconds_;
 
-	auto &board = Board::GetInstance();
-	auto *serial = board.GetSerial();
-	serial->Write("Tick: %lu, dropped: %lu\r\n", seconds, dropped_);
+	auto *serial = board_->GetSerial();
+	serial->Write("Tick: %lu, dropped: %lu\r\n", seconds_, dropped_);
 }
 
 void Application::HandleWatchdogRefresh() {
-	Board::GetInstance().RefreshWatchdog();
+	board_->RefreshWatchdog();
 }
 
 void Application::HandleBlink() {
-	auto &board = Board::GetInstance();
-	auto *led = board.GetLed(Board::RED_LED_INDEX);
+	auto *led = board_->GetLed(Board::RED_LED_INDEX);
 	if (led) {
 		led->Toggle();
 	}
-	led = board.GetLed(Board::GREEN_LED_INDEX);
+	led = board_->GetLed(Board::GREEN_LED_INDEX);
 	if (led) {
 		led->Toggle();
 	}
@@ -144,10 +144,9 @@ void Application::HandleButtonReleased(const QueueItem &item) {
 		return;
 	}
 
-	auto *serial = Board::GetInstance().GetSerial();
-	serial->Write("Button0 released\r\n");
+	board_->GetSerial()->Write("Button0 released\r\n");
 }
 
 extern "C" void app_main(void) {
-	Application::GetInstance().Start();
+	Application::GetInstance().Start(Board::GetInstance());
 }

@@ -2,7 +2,7 @@
 
 #include "board_hal.h"   // TODO: 换成目标厂商 HAL 头，例如 "stm32f4xx_hal.h" / "py32f0xx_hal.h"
 
-#include "led.hpp"
+#include "devices/led.hpp"
 
 // BSP：GPIO 直连 LED。
 // 引脚的时钟与输出模式由 Board 统一初始化（见 bsp/board.cpp），

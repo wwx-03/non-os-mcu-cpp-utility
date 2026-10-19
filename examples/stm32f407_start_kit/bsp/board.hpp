@@ -33,4 +33,8 @@ public:
 
 private:
 	Board();
+
+	// 命名空间作用域替代品：成员在 Board 构造时初始化，
+	// 不使用函数内 static（否则首次访问若发生在 ISR 里就等于在中断里初始化外设）
+	Serial<SERIAL1_RX_SIZE, SERIAL1_TX_SIZE> serial_;
 };

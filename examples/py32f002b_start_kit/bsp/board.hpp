@@ -18,5 +18,8 @@ public:
 	void RefreshWatchdog();
 
 private:
-	Board() = default;
+	Board();
+
+	// 成员对象在 Board 构造时初始化，不使用函数内 static
+	Serial<128, 128> serial_;
 };

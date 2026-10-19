@@ -2,18 +2,19 @@
 
 #include "board.hpp"
 
-Application::Application() {
+Application::Application()
+	: board_(&Board::GetInstance()) {
 	// 定时器回调运行在 1ms 中断里：只投递事件
 	tick_timer_.create(1000, true, +[](void *ctx) {
 		static_cast<Application *>(ctx)->PostEvent(EVT_TICK);
 	}, this);
 
 	// BSP 回调运行在中断里：只投递事件
-	Board::GetInstance().OnSerialData(+[](size_t size, void *ctx) {
+	board_->OnSerialData(+[](size_t size, void *ctx) {
 		static_cast<Application *>(ctx)->PostSerialData(size);
 	}, this);
 
-	Board::GetInstance().OnKeyPressed(+[](uint8_t index, void *ctx) {
+	board_->OnKeyPressed(+[](uint8_t index, void *ctx) {
 		static_cast<Application *>(ctx)->PostKey(index);
 	}, this);
 
@@ -21,6 +22,9 @@ Application::Application() {
 }
 
 void Application::Start(Board &board) {
+	// 两种模式写法一致：Layered 传具体板，DIP/Hybrid 传抽象板
+	board_ = &board;
+
 	QueueItem item = {};
 	while (true) {
 		if (!queue_.pop(item)) {
@@ -78,7 +82,7 @@ void Application::HandleStart() {
 
 void Application::HandleSerialData(const QueueItem &item) {
 	uint8_t buffer[64] = {};
-	const size_t n = Board::GetInstance().ReadSerial(buffer, item.data.serial.size);
+	const size_t n = board_->ReadSerial(buffer, item.data.serial.size);
 	(void)n;   // TODO: 按协议解析或回显
 }
 
