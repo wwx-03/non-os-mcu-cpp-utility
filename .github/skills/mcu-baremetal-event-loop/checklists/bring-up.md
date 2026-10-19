@@ -5,6 +5,8 @@
 
 ## 平台与移植
 
+- [ ] 架构模式（Layered / DIP / Hybrid）已选定并记录理由
+- [ ] 构建期已强制依赖方向；在 `app/` include `bsp/` 会编译失败（DIP/Hybrid）
 - [ ] 平台契约已填写并记录到工程（`docs/platform.md` 或 README）
 - [ ] `port/mcu_cmsis.h` 指向正确的器件头
 - [ ] `__get_PRIMASK` / `__disable_irq` / `__set_PRIMASK` 可用；缺失时在 `mcu_cmsis.h` 中转接，
@@ -36,6 +38,12 @@
 
 - [ ] 应用层没有 include 厂商 HAL 头，只通过 `Board` 取资源
 - [ ] `devices/` 没有厂商头、没有引脚号 / 极性
+- [ ] DIP/Hybrid 下 `app` 不 include `bsp/`，只看到 `devices` 接口
+- [ ] 抽象 `Board` 只含 `GetXxx()`，没有喂狗 / 板号 / 引脚常量
+- [ ] 具体板命名为 `<MCU><BoardName><Version>Board`，`final` + `override`
+- [ ] 全工程只有一个选板点（`bsp/board_select.hpp`），没有多处 `#ifdef` 选板
+- [ ] `devices` 接口析构是 `protected` 非虚，没有 `delete` 基类
+- [ ] `Application::Start(Board &)` 是统一签名；Layered 传具体板引用
 - [ ] BSP 初始化（时钟、GPIO、外设）只在 `Board`，驱动构造 / 析构里没有
       `HAL_GPIO_Init` / `HAL_GPIO_DeInit`
 - [ ] 器件基类构造函数里没有调用纯虚函数；初值采样放在 `Start()`

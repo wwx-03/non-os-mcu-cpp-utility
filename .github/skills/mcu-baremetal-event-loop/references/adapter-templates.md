@@ -43,13 +43,24 @@
 
 ### 3.1 单例约定
 
-`Application` 与 `Board` 固定为"私有构造 + 函数内 `static` 实例 + `GetInstance()`"：
+`Application` 固定为"私有构造 + 函数内 `static` 实例 + `GetInstance()`"。
 
-- 禁止全局对象、自由函数、宏单例、工厂、依赖注入、注册表、public 构造；
-- 首次 `GetInstance()` 必须发生在**中断使能之前**，避免 ISR 触发首次构造；
-- 删除拷贝构造与拷贝赋值。
+`Board` 的形态由架构模式决定（见 SKILL.md「架构模式」）：
 
-这是"函数内 static"唯一被允许的场景；器件对象不要用函数内 static（见 §8）。
+- **Layered**：具体 `Board` 同为"私有构造 + 函数内 `static` 实例 + `GetInstance()`"；
+  `Application` 内部通过 `Board::GetInstance()` 取资源。
+- **DIP / Hybrid**：抽象 `Board` **不提供 `GetInstance()`**；
+  具体板 `<MCU><BoardName><Version>Board` 提供 `GetInstance()`，
+  由 `bsp/board_select.hpp` 选定，`main()` 注入 `Application::Start(Board &)`。
+
+共同要求：
+
+- 禁止全局对象、自由函数、宏单例、工厂、注册表、public 构造；
+- 首次 `GetInstance()` / 具体板构造必须发生在**中断使能之前**，避免 ISR 触发首次构造；
+- 删除拷贝构造与拷贝赋值；
+- 抽象 `Board` 的析构设为 `protected` 非虚，禁止通过基类指针 `delete`。
+
+"函数内 static"只允许用于 `Application` 与具体板类；器件对象不要用函数内 static（见 §8）。
 
 ### 3.2 职责
 
@@ -93,7 +104,7 @@
 Application::PostXxx()   ──►  queue<QueueItem, N>（irq_lock 保护）
                                       │
                                       ▼
-Application::Start()  while (true)：pop 一个 → switch 事件号 → HandleXxx(item)
+Application::Start(Board&)  while (true)：pop → switch 事件号 → HandleXxx(item)
                                       │
                                       ▼
                               业务 / 状态机 / 调用 BSP 接口
@@ -102,14 +113,14 @@ Application::Start()  while (true)：pop 一个 → switch 事件号 → HandleX
 规则：
 
 1. 投递入口只有 `PostXxx()`：只允许 POD 构造 + `push`，不得调用 HAL、延时或解析数据；
-2. `Start()` 永不返回：`pop` 失败可以 `continue`，或 `__WFI()` 睡眠；
+2. `Start(Board &)` 永不返回：`pop` 失败可以 `continue`，或 `__WFI()` 睡眠；
 3. 事件号集中定义在 `Application`，BSP 与驱动不得自定义；
 4. 载荷只放 POD，优先 ≤ 8 字节；不要放指针；
 5. 事件是 FIFO、无优先级：高频事件会挤压低频事件，忙时用位图合并同类事件；
 6. handler 必须快速返回且幂等；长流程拆状态机；
 7. 队列满必须可观测：`push` 返回 `false` 时计数，调试期断言；
 8. 构造函数只做"注册 BSP 回调 + 投递初始事件"，所有单例必须在开中断前构造；
-9. 单例形态固定，`app_main()` 里只调用 `Application::GetInstance().Start()`。
+9. 单例形态固定，`main()` 里只调用 `Application::GetInstance().Start(board)`；Layered 传 `Board::GetInstance()`，DIP/Hybrid 传 `ActiveBoard` 静态实例。
 
 handler 内再次 `PostXxx()` 是允许的，但不要形成自激循环；主动触发业务也从
 `PostXxx()` 进入，不要直接调用 `HandleXxx()`。

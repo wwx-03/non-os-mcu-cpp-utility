@@ -1,6 +1,6 @@
 ---
 name: mcu-baremetal-event-loop
-description: '编写或改造裸机 MCU（Cortex-M / STM32 / PY32 / 嵌入式 C++）代码时使用本仓库（queue.hpp、stream_buffer.hpp、timers.hpp、irq_lock.hpp）已有的工程模式：中断只投递事件、由 Application 的事件循环统一派发、BSP 层 Board 统一管理板级资源、静态内存、irq_lock 临界区、1ms 软件定时器。生成代码前先填写平台契约（MCU/器件头、中断原语、tick 来源、HAL、工具链），再按 templates/ 生成 app/bsp/devices/port，按 references/toolchains.md 配置 EIDE / Keil AC6 / GCC。Use when adding peripherals, events, timers, UART/串口 protocols, interrupts, drivers, BSP/board ports, scaffolding a new bare-metal project, configuring its toolchain (EIDE eide.yml, Keil MDK AC6, GCC), or porting this library into an existing one, and generate code that follows these patterns instead of inventing new ones.'
+description: '编写或改造裸机 MCU（Cortex-M / STM32 / PY32 / 嵌入式 C++）代码时使用本仓库（queue.hpp、stream_buffer.hpp、timers.hpp、irq_lock.hpp）已有的工程模式：中断只投递事件、由 Application 的事件循环统一派发、BSP 层 Board 统一管理板级资源、静态内存、irq_lock 临界区、1ms 软件定时器。生成代码前先选择架构模式（Layered / DIP（Ports & Adapters）/ Hybrid），在平台契约中记录 app 依赖 bsp 还是 devices、抽象 Board 与具体板类（<MCU><BoardName><Version>Board）、唯一选板点 board_select.hpp，再填写平台契约（MCU/器件头、中断原语、tick 来源、HAL、工具链），按 templates/ 生成 app/bsp/devices/port，按 references/toolchains.md 配置 EIDE / Keil AC6 / GCC。Use when adding peripherals, events, timers, UART/串口 protocols, interrupts, drivers, BSP/board ports, scaffolding a new bare-metal project, choosing between layered and dependency-inverted device abstractions (abstract Board + per-board implementation), configuring its toolchain (EIDE eide.yml, Keil MDK AC6, GCC), or porting this library into an existing one, and generate code that follows these patterns instead of inventing new ones.'
 argument-hint: '目标 MCU/工具链 + 要新增的外设 / 事件 / 定时任务，例如"STM32F407 + Keil AC6，加一个按键长按事件"'
 ---
 
@@ -20,12 +20,13 @@ argument-hint: '目标 MCU/工具链 + 要新增的外设 / 事件 / 定时任�
 ## 使用顺序（强制）
 
 1. 从需求/仓库识别：MCU、内核、厂商 HAL/SDK、工程来源、工具链、1 ms tick 来源。
-2. 阅读器件头与 HAL 文档，填写 `references/platform-profile.md` 中的契约。
-3. 完成唯一移植点 `port/mcu_cmsis.h` 与 tick 接入（见 `references/porting.md`）。
-4. 以 `templates/`（或 `examples/` 中的完整范例）生成 `app/bsp/devices/port`；
+2. 选择架构模式（Layered / DIP / Hybrid，见「架构模式」一节），记录理由与模块边界。
+3. 阅读器件头与 HAL 文档，填写 `references/platform-profile.md` 中的契约。
+4. 完成唯一移植点 `port/mcu_cmsis.h` 与 tick 接入（见 `references/porting.md`）。
+5. 以 `templates/`（或 `examples/` 中的完整范例）生成 `app/bsp/devices/port`；
    `Core/`、`Drivers/`、启动文件、链接脚本交给厂商工具生成，不要复制。
-5. 按 `references/toolchains.md` 配置 EIDE / Keil / GCC，**沿用工程原有工具链**。
-6. 按 `checklists/bring-up.md` 逐项核对，并用实际工具链编译、上电 smoke test。
+6. 按 `references/toolchains.md` 配置 EIDE / Keil / GCC，**沿用工程原有工具链**。
+7. 按 `checklists/bring-up.md` 逐项核对，并用实际工具链编译、上电 smoke test。
 
 **不确定的平台语义不许猜。** 查不到就标 TODO 并向用户确认。
 
@@ -33,6 +34,7 @@ argument-hint: '目标 MCU/工具链 + 要新增的外设 / 事件 / 定时任�
 
 | 契约项 | 为什么必须确认 | 典型取值 |
 | --- | --- | --- |
+| 架构模式 | 决定 app 依赖 bsp 还是 devices，以及 Board 是具体类还是抽象接口 | Layered / DIP / Hybrid |
 | MCU / 内核 | 决定 CMSIS 头、FPU、中断原语 | Cortex-M0+ / M4F |
 | CMSIS 器件头 | `mcu_cmsis.h` 的唯一内容 | `py32f0xx.h` / `stm32f4xx.h` |
 | 中断原语 | `irq_lock` 能否直接工作 | `__get_PRIMASK` 等是否可用 |
@@ -73,7 +75,15 @@ argument-hint: '目标 MCU/工具链 + 要新增的外设 / 事件 / 定时任�
 
 1. 复制对应范例的 `app/`、`bsp/`、`devices/`、`port/` 四个目录（**不要复制** `Core/`、`Drivers/`、`EIDE/`，它们必须由目标 MCU 的厂商工具生成）。
 2. 替换 `port/mcu_cmsis.h` 的器件头；确认平台提供 `__get_PRIMASK` / `__disable_irq` / `__set_PRIMASK`，缺失时在该头里补齐转接。
-3. 按目标板重写 `bsp/board.*` 与驱动（串口、按键、LED…），保持 `Board` 单例与"读 / 写 / 注册通知"契约；`devices/` 只保留与 MCU 无关的抽象，板级细节一律留在 BSP。范例里的 `usart.h` / `iwdg.h` 是厂商文件，换板时换成新工程的初始化头；目标工程没有 IWDG 时删掉 `RefreshWatchdog()` 与喂狗定时器。
+3. 按**已选架构模式**生成 Board：
+   - **Layered**：重写 `bsp/board.*`，保持具体 `Board` 单例与"读 / 写 / 注册通知"契约；
+     `app/application.cpp` 通过 `Board::GetInstance()` 取资源。
+   - **DIP / Hybrid**：新增 `devices/board.hpp`（抽象，只含 `GetXxx()`）、
+     `bsp/<board_name>_board.hpp`（`<MCU><BoardName><Version>Board`，`final`）、
+     `bsp/board_select.hpp`（`using ActiveBoard = ...`）；
+     `app/application.*` 只 include `devices/board.hpp`，改用 `Start(Board &)`，
+     `main()` 持有静态 `ActiveBoard` 并注入；`app/` 的 include 路径不得含 `bsp/`。
+   `devices/` 只保留与 MCU 无关的抽象，板级细节一律留在 BSP。范例里的 `usart.h` / `iwdg.h` 是厂商文件，换板时换成新工程的初始化头；目标工程没有 IWDG 时删掉 `RefreshWatchdog()` 与喂狗定时器。
 4. 修改 `app/application.*` 的事件号、`QueueItem` 载荷与 handler。
 5. 在 1ms 中断里调用 `timer::OnMilliSecondTick()`。
 6. 工程配置：**先确认工程原有工具链并沿用**（Keil / CubeMX 导入的 MDK-ARM 工程用 AC6，GCC 工程用 GCC），再按 [references/toolchains.md](./references/toolchains.md) 设置 `srcDirs` / `incList` / C++17 选项与链接参数，改完必须用该工具链实际编译一次。
@@ -88,7 +98,10 @@ argument-hint: '目标 MCU/工具链 + 要新增的外设 / 事件 / 定时任�
 2. **静态内存**：禁止 `new` / `malloc` / `std::vector` / `std::string` / `std::function` / 智能指针。对象只能是全局、命名空间作用域静态或成员；不要用函数内 `static`（会引入 `__cxa_guard`，且首次访问若发生在 ISR 里就等于在中断里初始化外设）。
 3. **共享可变状态一律用 `irq_lock`**：临界区只包住几条语句，不要在里面调用 HAL 阻塞接口。
 
-## 分层与依赖方向
+## 架构模式：Layered / DIP / Hybrid
+
+裸机工程同样有三种组织方式。**生成骨架前必须选定一种并记录到平台契约**，
+不允许在同一模块里无规则混用。
 
 ```
 core/     startup、链接脚本、时钟初始化（厂商生成，只读）
@@ -100,11 +113,168 @@ bsp/      板级支持包：Board —— 板级资源与 HAL 回调的唯一入�
 app/      Application —— 事件循环唯一实现位置
 ```
 
-依赖方向只能是：
+### A. Layered（默认）
 
 ```
 app → bsp → devices → utility → port → CMSIS
 ```
+
+- `app` 通过具体 `Board` 取资源；`devices` 是 `bsp` 的实现细节。
+- 优点：文件少、无虚函数、代码体积最小、bring-up 最快。
+- 缺点：换板/换器件/PC 单测时修改面大。
+- 适用：个人玩具、POC、单板、器件固定、小团队、Flash/RAM 紧。
+
+### B. DIP / Ports & Adapters
+
+```
+app → devices ← bsp
+          ↑
+     abstract Board
+          ↑
+  Stm32F407StartKitBoard（bsp）
+```
+
+- `devices/`：器件/服务纯接口 + 纯协议；**不含 HAL、引脚、极性**。
+- `bsp/`：实现接口，只做 IO、ISR、HAL 回调转发。
+- 抽象 `Board` 只暴露 `GetXxx()` 设备接口；具体板按板命名。
+- 优点：可 mock、可换板/换器件、边界清晰、多人并行。
+- 缺点：虚调用 + 每个对象一个 vtable 指针（约 4 B RAM）；接口需要维护。
+- 适用：多板/多 MCU、器件可替换、需要 PC 端测试、长期维护。
+
+#### 抽象 Board（`devices/board.hpp`）
+
+```cpp
+#pragma once
+
+#include <stddef.h>
+
+class Led;
+class Button;
+class Network;
+
+class Board {
+public:
+	Board(const Board &) = delete;
+	Board &operator=(const Board &) = delete;
+
+	virtual Led *GetLed(size_t index) = 0;
+	virtual Button *GetButton(size_t index) = 0;
+	virtual Network *GetNetwork() = 0;
+
+protected:
+	// 静态对象，禁止通过基类指针 delete
+	~Board() = default;
+};
+```
+
+#### 具体板（`bsp/<board_name>_board.hpp`）
+
+```cpp
+#pragma once
+
+#include "devices/board.hpp"
+
+#include "bsp/gpio_button.hpp"
+#include "bsp/gpio_led.hpp"
+
+class Stm32F407StartKitBoard final : public Board {
+public:
+	static Stm32F407StartKitBoard &GetInstance() {
+		static Stm32F407StartKitBoard instance;
+		return instance;
+	}
+
+	Stm32F407StartKitBoard(const Stm32F407StartKitBoard &) = delete;
+	Stm32F407StartKitBoard &operator=(const Stm32F407StartKitBoard &) = delete;
+
+	Led *GetLed(size_t index) override;
+	Button *GetButton(size_t index) override;
+	Network *GetNetwork() override { return &network_; }
+
+	// 板级专用能力不放进抽象 Board
+	void RefreshWatchdog();
+
+private:
+	Stm32F407StartKitBoard();
+
+	GpioLed led_red_;
+	GpioLed led_green_;
+	GpioButton button0_;
+	Network network_;
+};
+```
+
+#### 唯一选板点（`bsp/board_select.hpp`）
+
+```cpp
+#pragma once
+
+#include "bsp/stm32f407_start_kit_board.hpp"
+
+using ActiveBoard = Stm32F407StartKitBoard;
+```
+
+```cpp
+// main()
+static ActiveBoard board;
+Application::GetInstance().Start(board);   // app 只看到 Board&
+```
+
+规则：
+
+1. 命名固定为 `<MCU><BoardName><Version>Board`，`final`，`override` 显式写出。
+2. 抽象 `Board` 上只放 `GetXxx()`；喂狗、板号、自检留在具体板或单独服务接口。
+3. 具体板与器件对象都是静态对象；构造必须早于中断使能。
+4. `devices` 接口析构用 `protected` 非虚，禁止 `delete`。
+5. `app` 不 include `bsp/` 与任何厂商头；只有 `main()` 认识具体板。
+6. 只在有"多种接法/需要 mock"时才抽象；简单 GPIO 器件可直接用 BSP 具体类。
+
+### C. Hybrid（多数公司项目的默认）
+
+- 复杂/易变模块（网络、存储、显示、传感器）走 `devices` 接口。
+- 简单稳定器件（LED、蜂鸣器、按键）直接用 `bsp` 具体类。
+- 必须在平台契约里逐模块列出"走哪条路径"；同一模块不允许两条路径并存。
+
+### 选择判据（按优先级）
+
+1. **板卡/器件变体**：≥ 2 个板卡/MCU/器件变体 → DIP/Hybrid。
+2. **可测试性**：需要 PC 端 mock/单测 → DIP/Hybrid。
+3. **复杂度**：≥ 3 个复杂或易变模块 → Hybrid/DIP。
+4. **团队与生命周期**：多人并行、长期维护 → DIP/Hybrid。
+5. **Flash/RAM**：只作为约束/否决项，不是主判据。
+   - 极紧（例如 Flash < 32 KB 或 RAM < 4 KB）且无测试/多板需求 → Layered/Hybrid。
+   - 资源充足不等于必须 DIP；仍按 1~4 选择。
+   - 用 `size` / `.map` 实测代码与 RAM 增量，不要凭 MCU 型号猜。
+
+| 场景 | 推荐 |
+| --- | --- |
+| 个人玩具、POC、单板、器件固定 | Layered |
+| 裸机小工程、固定硬件 | Layered |
+| 公司单板、小团队、短周期 | Layered 或轻量 Hybrid |
+| 公司多板/多版本/长周期/有 PC 单测 | Hybrid，必要时 DIP |
+| 裸机多板/需主机测试/协议复杂 | Hybrid / DIP |
+| Flash/RAM 极紧且无测试/多板需求 | Layered/Hybrid |
+
+### 构建期强制
+
+裸机没有 ESP-IDF 的组件依赖机制，用目录隔离 + 编译期检查：
+
+- `app/` 的 include 路径只加 `app/ devices/ utility/ port/`，**不加 `bsp/`**；
+- `bsp/` 的 include 路径再追加 `bsp/`；
+- 或用一条 CI 检查：`app/**` 中不得出现 `#include "bsp/` 与厂商 HAL 头。
+
+验收：临时在 `app/` 里 include `bsp/`，构建必须失败。
+
+### 反模式
+
+| 反模式 | 正确做法 |
+| --- | --- |
+| app 同时 include bsp 和 devices，没有逐模块规则 | 选定 Layered/DIP/Hybrid 并逐模块记录 |
+| 具体板仍叫 `Board`，与抽象类重名 | `<MCU><BoardName><Version>Board` |
+| 抽象 `Board` 上出现喂狗/板号/引脚常量 | 留在具体板或抽服务接口 |
+| 多个地方 `#ifdef` 选板 | 全工程一个 `bsp/board_select.hpp` |
+| 为每个 GPIO 都造接口 | 只在多种接法/需要 mock 时抽象 |
+| 只在文档里写模式，构建不约束 | 目录隔离 + CI include 检查 |
 
 - 应用层只认识 `Board` 暴露的接口，绝不直接 `#include` 厂商 HAL 头；
 - `devices/` 只依赖 `utility/` 与标准库，**一行 HAL 都不能出现**；
@@ -151,6 +321,23 @@ static Application &GetInstance() {
 }
 ```
 
+`Start()` 接收板级抽象，**三种模式统一签名**：
+
+```cpp
+void Start(Board &board);   // Layered 传具体 Board，DIP/Hybrid 传抽象 Board
+```
+
+```cpp
+// Layered
+Application::GetInstance().Start(Board::GetInstance());
+
+// DIP / Hybrid
+static ActiveBoard board;
+Application::GetInstance().Start(board);
+```
+
+`Application` 内部只保存 `Board *board_` 并通过它取资源，**不 include `bsp/`**。
+
 事件从产生到处理的完整链路只有一条：
 
 ```
@@ -160,7 +347,7 @@ static Application &GetInstance() {
 Application::PostXxx()   ──►  queue<QueueItem, N>（irq_lock 保护）
                                       │
                                       ▼
-Application::Start()  while (true)：pop 一个 → switch 事件号 → HandleXxx(item)
+Application::Start(Board&)  while (true)：pop → switch 事件号 → HandleXxx(item)
                                       │
                                       ▼
                               业务 / 状态机 / 调用 BSP 接口
@@ -169,14 +356,18 @@ Application::Start()  while (true)：pop 一个 → switch 事件号 → HandleX
 规则：
 
 1. **投递入口只有 `PostXxx()`**：每个都等价于构造一个 `QueueItem` 再 `queue_.push(item)`。它们会被中断调用，所以只允许 POD 构造 + `push`，不得调用 HAL、不得延时、不得解析数据。
-2. **`Start()` 永不返回**：`pop` 成功就派发，失败可以直接 `continue`，或 `__WFI()` 睡眠（SysTick 每 1ms 会唤醒，最坏唤醒延迟 1ms）。
+2. **`Start(Board &)` 永不返回**：`pop` 成功就派发，失败可以直接 `continue`，或 `__WFI()` 睡眠（SysTick 每 1ms 会唤醒，最坏唤醒延迟 1ms）。
 3. **事件号集中定义**在 `Application` 里（`static constexpr uint32_t EVT_XXX`），BSP 和驱动不得自定义事件号。
 4. **载荷只放 POD**，优先 ≤ 8 字节，按值放进 `QueueItem` 的 `union`；不要放指针（生命周期无法保证）。
 5. **事件是 FIFO，没有优先级**：高频事件会挤压低频事件。忙时用位图合并同类事件，或用"读取可用字节数"代替"每字节一个事件"。
 6. **handler 必须快速返回且幂等**：handler 的执行时间就是其它事件的等待时间；同一事件可能连续到达，长流程要拆成状态机，由后续事件或定时器推进。
 7. **队列满必须可观测**：`push` 返回 `false` 时计数（`dropped_`），调试期直接断言，禁止静默丢弃。
 8. **初始化顺序**：`Application` 构造函数里只做"注册 BSP 回调 + 投递初始事件"，所有单例（含 `Board`）必须在外设中断使能之前构造完成。
-9. **单例形态固定**：`Application` 与 `Board` 一律是"私有构造 + 函数内 `static` 实例 + `GetInstance()`"。不要改成全局对象、自由函数、工厂、依赖注入、注册表或宏单例；`app_main()` 里只调用 `Application::GetInstance().Start()`。
+9. **单例形态固定**：`Application` 一律是"私有构造 + 函数内 `static` 实例 + `GetInstance()`"，`main()` 里只调用 `Application::GetInstance().Start(board)`；不要改成工厂、注册表或宏单例。
+   `Board` 的形态由架构模式决定：
+   - **Layered**：具体 `Board` 单例（私有构造 + `GetInstance()`），`Application` 内部直接取用。
+   - **DIP / Hybrid**：**抽象 `Board` 不提供 `GetInstance()`**；具体板类 `<MCU><BoardName><Version>Board`
+     提供 `GetInstance()`，由 `main()` 通过 `board_select.hpp` 选定并注入 `Application`。
 
 handler 内部再次 `PostXxx()` 是允许的（状态机推进），但不要形成自激循环；需要在中断之外主动触发时，也从 `PostXxx()` 进入，不要直接调用 `HandleXxx()`。
 
@@ -184,7 +375,9 @@ handler 内部再次 `PostXxx()` 是允许的（状态机推进），但不要�
 
 `Board` 是"这一块板子"的抽象，**一块板子一份实现**。同 MCU 但引脚、外设、器件不同，就换一份 `Board`，应用层代码不变。
 
-`Board` 同样是**单例**：私有构造函数 + `static Board &GetInstance()`。全工程只有这一份实例，禁止改成全局对象、工厂、依赖注入、注册表或宏单例，也不允许创建第二个实例。
+形态按架构模式选择（见「架构模式」）：
+
+**Layered**：具体 `Board` 单例。
 
 ```cpp
 class Board {
@@ -203,12 +396,46 @@ private:
 };
 ```
 
+**DIP / Hybrid**：抽象 `Board` 不放 `GetInstance()`；具体板
+`<MCU><BoardName><Version>Board` 实现并单例，由 `board_select.hpp` 选定：
+
+```cpp
+// devices/board.hpp
+class Board {
+public:
+	virtual Led *GetLed(size_t index) = 0;
+	virtual Button *GetButton(size_t index) = 0;
+
+protected:
+	~Board() = default;   // 静态对象，禁止 delete
+};
+
+// bsp/stm32f407_start_kit_board.hpp
+class Stm32F407StartKitBoard final : public Board {
+public:
+	static Stm32F407StartKitBoard &GetInstance() {
+		static Stm32F407StartKitBoard instance;
+		return instance;
+	}
+
+	Led *GetLed(size_t index) override;
+	Button *GetButton(size_t index) override;
+};
+
+// bsp/board_select.hpp
+using ActiveBoard = Stm32F407StartKitBoard;
+
+// main()
+static ActiveBoard board;
+Application::GetInstance().Start(board);
+```
+
 职责（且只有这些）：
 
 1. 持有并初始化 HAL 句柄（`huart`、`htim`、`hadc`…），完成板级初始化。
-2. 构造板级驱动对象（串口、按键、LED、传感器…），并通过接口暴露出去，例如 `GetUart()`、`GetKey()`；返回类型由该板 BSP 决定。
+2. 构造板级驱动对象（串口、按键、LED、传感器…），并通过接口暴露出去，例如 `GetUart()`、`GetKey()`；返回类型由该板 BSP 决定。DIP/Hybrid 下返回 `devices` 接口。
 3. **独占并转发 HAL 弱回调**（`HAL_UART_RxCpltCallback`、`HAL_GPIO_EXTI_Callback`…），按句柄/引脚路由到对应驱动。
-4. 提供板级常量与能力查询（引脚定义、时钟、是否支持 DMA 等）。
+4. 提供板级常量与能力查询（引脚定义、时钟、是否支持 DMA 等）。**这些只留在具体板类，不放进抽象 `Board`。**
 
 不做什么：
 

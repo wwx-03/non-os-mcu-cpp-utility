@@ -102,10 +102,31 @@ int main()
 
 本仓库配套的骨架是：**中断只投递事件 → `Application` 的事件循环统一派发 → 静态内存 → `irq_lock` 保护共享状态**。
 
-- **Application**：全工程唯一的事件循环，也是唯一持有事件队列的地方。所有中断通过 `PostXxx()` 投递，`Start()` 里 `pop` 后按事件号派发到 handler。**必须用 `GetInstance()` 单例**。
-- **BSP（Board）**：全工程唯一接触 HAL 的地方，一块板子一份实现。负责持有 HAL 句柄、构造板级资源、独占并转发 HAL 回调；驱动只上报"有数据/有事件"，不解析协议。**同样是 `GetInstance()` 单例**，不允许改全局对象、工厂或依赖注入。
+- **Application**：全工程唯一的事件循环，也是唯一持有事件队列的地方。所有中断通过 `PostXxx()` 投递，`Start(Board &)` 里 `pop` 后按事件号派发到 handler。**必须用 `GetInstance()` 单例**。
+- **BSP（Board）**：全工程唯一接触 HAL 的地方，一块板子一份实现。负责持有 HAL 句柄、构造板级资源、独占并转发 HAL 回调；驱动只上报"有数据/有事件"，不解析协议。
 - **驱动（Serial、Timer 等）**：属于具体板子的 BSP，本仓库**不提供**。换板时按新硬件与 HAL 能力重写，保持接口语义即可。
-- **器件抽象（devices）**：与 MCU 无关的行为模型（`Led`、`Button`…），只描述"是什么"，不碰引脚与 HAL；具体实现由 `bsp/` 继承并提供，`Board` 只暴露基类指针。
+- **器件抽象（devices）**：与 MCU 无关的行为模型（`Led`、`Button`…），只描述"是什么"，不碰引脚与 HAL；具体实现由 `bsp/` 继承并提供。
+
+### 架构模式：Layered / DIP / Hybrid
+
+生成骨架前先选一种模式并记录理由（规则见 SKILL.md 的「架构模式」一节）：
+
+| 模式 | 依赖方向 | Board 形态 | 适用 |
+| --- | --- | --- | --- |
+| **Layered**（默认） | `app → bsp → devices` | 具体 `Board` 单例 | 个人玩具、单板、固定器件、小团队 |
+| **DIP** | `app → devices ← bsp` | 抽象 `Board` + 具体板类 | 多板/多 MCU、可换器件、PC 单测、长期维护 |
+| **Hybrid** | 逐模块 | 抽象只覆盖被抽象的设备 | 多数公司项目 |
+
+判据以**变体数量、可测试性、复杂度、团队/生命周期**为主；Flash/RAM 只作为约束/否决项。
+
+DIP / Hybrid 的固定写法：
+
+- 抽象 `Board` 放在 `devices/board.hpp`，**只含 `GetXxx()`**，析构 `protected` 非虚；
+- 具体板放 `bsp/`，命名 `<MCU><BoardName><Version>Board`，`final` + `override`；
+- 全工程一个选板点 `bsp/board_select.hpp`（`using ActiveBoard = ...`）；
+- `main()` 持有静态 `ActiveBoard`，注入 `Application::Start(Board &)`；
+- 板级专用能力（喂狗、板号、自检）留在具体板，不上抽象接口；
+- `app/` 不 include `bsp/`，构建期用 include 路径隔离强制。
 
 新增外设、事件、定时任务时请沿用该模式，不要在一个工程里混用 RTOS、动态内存或另一套事件机制。完整的规则、反模式和代码模板见：
 

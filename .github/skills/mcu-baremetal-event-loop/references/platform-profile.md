@@ -15,6 +15,11 @@
 
 | 契约项 | 取值 | 依据 / 备注 |
 | --- | --- | --- |
+| 架构模式 | Layered / DIP / Hybrid | 变体、测试、复杂度、团队、Flash/RAM |
+| app 可见的抽象 | 具体 `Board` / 抽象 `Board` / 混合 | 由架构模式决定 |
+| 具体板类名（DIP/Hybrid） | 例：`Stm32F407StartKitBoard` | `<MCU><BoardName><Version>Board` |
+| 唯一选板点（DIP/Hybrid） | 例：`bsp/board_select.hpp` | 全工程只此一处 |
+| app 的 include 是否含 `bsp/` | 否（DIP/Hybrid）/ 是（Layered） | 构建期强制 |
 | MCU / 内核 | 例：STM32F407ZGTx / Cortex-M4F | 数据手册 |
 | 位宽 / FPU / ABI | 32-bit / 单精度硬件 FPU / hard-float | 编译选项 |
 | CMSIS 器件头 | 例：`stm32f4xx.h` | `port/mcu_cmsis.h` 的 include |
@@ -31,6 +36,32 @@
 | 工具链 | AC6 / GCC / 其它 | 工程来源决定，不擅自切换 |
 | 工程文件 | `eide.yml` / `.uvprojx` / Makefile | 必须与工具链一致 |
 | 验证命令 | build / size / flash | 见 `references/toolchains.md` |
+
+### 1.1 架构模式（先选模式，再填其余契约）
+
+裸机工程同样有 Layered / DIP / Hybrid 三种组织方式，规则与 RTOS 版一致：
+抽象 `Board` 只含 `GetXxx()`，具体板命名为 `<MCU><BoardName><Version>Board`，
+由唯一的 `bsp/board_select.hpp` 选定，`main()` 注入 `Application::Start(Board &)`。
+
+| 场景 | 推荐 |
+| --- | --- |
+| 个人玩具、POC、单板、器件固定 | Layered |
+| 裸机小工程、固定硬件 | Layered |
+| 公司单板、小团队、短周期 | Layered / 轻量 Hybrid |
+| 多板/多 MCU、器件可替换、PC 单测、长期维护 | Hybrid / DIP |
+| Flash/RAM 极紧且无测试/多板需求 | Layered/Hybrid |
+
+选定后必须记录：
+
+- 模式；
+- app 可见的抽象（具体 `Board` / 抽象 `Board` / 混合）；
+- 具体板类名（DIP/Hybrid）；
+- 唯一选板点；
+- app 的 include 路径是否包含 `bsp/`；
+- 逐模块依赖路径（Hybrid 必填）。
+
+> ROM/RAM 只作为约束/否决项，不是主判据。用 `size` / `.map` 实测，
+> 不要凭 MCU 型号猜。每个多态对象约多 4 B（vtable 指针）。
 
 ## 2. 逐项查证方法
 
