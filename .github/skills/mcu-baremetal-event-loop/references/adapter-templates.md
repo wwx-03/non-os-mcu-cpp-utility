@@ -49,18 +49,21 @@
 
 - **Layered**：具体 `Board` 同为"私有构造 + 函数内 `static` 实例 + `GetInstance()`"；
   `Application` 内部通过 `Board::GetInstance()` 取资源。
-- **DIP / Hybrid**：抽象 `Board` **不提供 `GetInstance()`**；
-  具体板 `<MCU><BoardName><Version>Board` 提供 `GetInstance()`，
-  由 `bsp/board_select.hpp` 选定，`main()` 注入 `Application::Start(Board &)`。
+- **DIP / Hybrid**：抽象 `Board` 提供 `GetInstance()`，内部转调 `create_new_board()`；
+  具体板 `<MCU><BoardName><Version>Board` **只在 `bsp/<board>_board.cpp` 内定义**，
+  末尾 `IMPLEMENT_BOARD_CLASS(<BoardClass>)` 提供唯一实现。
+  选板 = 只编译一个板级 `.cpp`（多个 → 重复符号，缺失 → undefined reference）。
 
 共同要求：
 
-- 禁止全局对象、自由函数、宏单例、工厂、注册表、public 构造；
+- 禁止全局对象、自由函数、宏单例、注册表、public 构造；
 - 首次 `GetInstance()` / 具体板构造必须发生在**中断使能之前**，避免 ISR 触发首次构造；
 - 删除拷贝构造与拷贝赋值；
-- 抽象 `Board` 的析构设为 `protected` 非虚，禁止通过基类指针 `delete`。
+- 抽象 `Board` 的析构设为 `protected` 非虚，禁止通过基类指针 `delete`；
+- `IMPLEMENT_BOARD_CLASS` 内部用函数内静态对象，**不使用 `new` / `malloc`**。
 
-"函数内 static"只允许用于 `Application` 与具体板类；器件对象不要用函数内 static（见 §8）。
+"函数内 static"只允许用于 `Application`、具体板类与 `IMPLEMENT_BOARD_CLASS`；
+器件对象不要用函数内 static（见 §8）。
 
 ### 3.2 职责
 
@@ -120,7 +123,7 @@ Application::Start(Board&)  while (true)：pop → switch 事件号 → HandleXx
 6. handler 必须快速返回且幂等；长流程拆状态机；
 7. 队列满必须可观测：`push` 返回 `false` 时计数，调试期断言；
 8. 构造函数只做"注册 BSP 回调 + 投递初始事件"，所有单例必须在开中断前构造；
-9. 单例形态固定，`main()` 里只调用 `Application::GetInstance().Start(board)`；Layered 传 `Board::GetInstance()`，DIP/Hybrid 传 `ActiveBoard` 静态实例。
+9. 单例形态固定，`main()` 里只调用 `Application::GetInstance().Start(Board::GetInstance())`；两种模式的 `Board::GetInstance()` 返回具体板或抽象接口。
 
 handler 内再次 `PostXxx()` 是允许的，但不要形成自激循环；主动触发业务也从
 `PostXxx()` 进入，不要直接调用 `HandleXxx()`。

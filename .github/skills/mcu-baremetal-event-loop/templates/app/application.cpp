@@ -20,7 +20,7 @@ Application::Application() {
 	PostEvent(EVT_START);   // 初始事件：主循环启动后第一个处理
 }
 
-void Application::Start() {
+void Application::Start(Board &board) {
 	QueueItem item = {};
 	while (true) {
 		if (!queue_.pop(item)) {
@@ -91,5 +91,6 @@ void Application::HandleKey(const QueueItem &item) {
 }
 
 extern "C" void app_main(void) {
-	Application::GetInstance().Start();
+	// 两种模式写法一致：Layered 返回具体 Board，DIP/Hybrid 返回抽象 Board
+	Application::GetInstance().Start(Board::GetInstance());
 }

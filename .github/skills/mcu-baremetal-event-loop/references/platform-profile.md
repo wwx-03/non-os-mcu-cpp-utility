@@ -18,7 +18,8 @@
 | 架构模式 | Layered / DIP / Hybrid | 变体、测试、复杂度、团队、Flash/RAM |
 | app 可见的抽象 | 具体 `Board` / 抽象 `Board` / 混合 | 由架构模式决定 |
 | 具体板类名（DIP/Hybrid） | 例：`Stm32F407StartKitBoard` | `<MCU><BoardName><Version>Board` |
-| 唯一选板点（DIP/Hybrid） | 例：`bsp/board_select.hpp` | 全工程只此一处 |
+| 具体板实现文件（DIP/Hybrid） | 例：`bsp/stm32f407_start_kit_board.cpp` | 类只在 .cpp 内定义 + `IMPLEMENT_BOARD_CLASS` |
+| 参与编译的板级 .cpp 数量 | 1 | 多个 → 链接期重复符号 |
 | app 的 include 是否含 `bsp/` | 否（DIP/Hybrid）/ 是（Layered） | 构建期强制 |
 | MCU / 内核 | 例：STM32F407ZGTx / Cortex-M4F | 数据手册 |
 | 位宽 / FPU / ABI | 32-bit / 单精度硬件 FPU / hard-float | 编译选项 |
@@ -41,7 +42,8 @@
 
 裸机工程同样有 Layered / DIP / Hybrid 三种组织方式，规则与 RTOS 版一致：
 抽象 `Board` 只含 `GetXxx()`，具体板命名为 `<MCU><BoardName><Version>Board`，
-由唯一的 `bsp/board_select.hpp` 选定，`main()` 注入 `Application::Start(Board &)`。
+只在 `bsp/<board>_board.cpp` 内定义，末尾 `IMPLEMENT_BOARD_CLASS()` 注册唯一实例；
+`main()` 注入 `Application::Start(Board &)`，选板 = 只编译一个板级 `.cpp`。
 
 | 场景 | 推荐 |
 | --- | --- |

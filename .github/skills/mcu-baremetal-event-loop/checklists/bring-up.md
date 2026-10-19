@@ -41,7 +41,9 @@
 - [ ] DIP/Hybrid 下 `app` 不 include `bsp/`，只看到 `devices` 接口
 - [ ] 抽象 `Board` 只含 `GetXxx()`，没有喂狗 / 板号 / 引脚常量
 - [ ] 具体板命名为 `<MCU><BoardName><Version>Board`，`final` + `override`
-- [ ] 全工程只有一个选板点（`bsp/board_select.hpp`），没有多处 `#ifdef` 选板
+- [ ] 全工程只编译一个 `bsp/*_board.cpp`；多个会链接期重复符号，缺失会 undefined reference
+- [ ] 具体板类只在 `.cpp` 内定义，没有为它提供 `.hpp`，也没有多处 `#ifdef` 选板
+- [ ] `IMPLEMENT_BOARD_CLASS()` 用函数内静态对象，没有 `new` / `malloc`
 - [ ] `devices` 接口析构是 `protected` 非虚，没有 `delete` 基类
 - [ ] `Application::Start(Board &)` 是统一签名；Layered 传具体板引用
 - [ ] BSP 初始化（时钟、GPIO、外设）只在 `Board`，驱动构造 / 析构里没有

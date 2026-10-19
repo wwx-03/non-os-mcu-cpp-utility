@@ -9,9 +9,9 @@
 
 // 应用层（DIP / Hybrid）：全工程唯一的事件循环（单例）。
 //
-// 与 Layered 版的区别只有两点：
-//   1. Application 只 include devices/board.hpp，不 include 任何 bsp/ 头；
-//   2. Start(Board &) 由 main() 注入具体板，内部只通过接口取资源。
+// 与 Layered 版的区别只有一点：
+//   Application 只 include devices/board.hpp，不 include 任何 bsp/ 头；
+//   main() 用 Start(Board::GetInstance()) 注入，具体板由 IMPLEMENT_BOARD_CLASS 注册。
 //
 // 中断只通过 PostXxx() 投递事件，业务全部在 Start() 的派发循环里处理。
 

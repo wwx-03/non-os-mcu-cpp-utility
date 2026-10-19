@@ -123,8 +123,10 @@ DIP / Hybrid 的固定写法：
 
 - 抽象 `Board` 放在 `devices/board.hpp`，**只含 `GetXxx()`**，析构 `protected` 非虚；
 - 具体板放 `bsp/`，命名 `<MCU><BoardName><Version>Board`，`final` + `override`；
-- 全工程一个选板点 `bsp/board_select.hpp`（`using ActiveBoard = ...`）；
-- `main()` 持有静态 `ActiveBoard`，注入 `Application::Start(Board &)`；
+- 抽象 `Board` 提供 `GetInstance()`，内部转调 `create_new_board()`；
+- 具体板类只在 `bsp/<board>_board.cpp` 里定义（**不写 `.hpp`**），文件末尾用 `IMPLEMENT_BOARD_CLASS()` 注册；
+- 选板 = 构建时只编译一个板级 `.cpp`（多个 → 重复符号，缺失 → undefined reference）；
+- `main()` 写成 `Application::GetInstance().Start(Board::GetInstance())`；
 - 板级专用能力（喂狗、板号、自检）留在具体板，不上抽象接口；
 - `app/` 不 include `bsp/`，构建期用 include 路径隔离强制。
 
