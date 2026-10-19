@@ -43,6 +43,6 @@
 3. `devices/` 只保留与 MCU 无关的器件抽象，引脚/极性/初始化留在 `bsp/`；
 4. `app/application.*` 修改事件号、载荷与 handler；
 5. 在 1ms 中断里调用 `timer::OnMilliSecondTick()`；
-6. 工程配置按 [SKILL.md](../.github/skills/mcu-baremetal-event-loop/SKILL.md) 的「EIDE 工程配置」设置：`srcDirs` 加 `app/`、`bsp/`、`devices/`、`port/`，`incList` 加仓库根目录与 `devices/`，C++ 用 `c++17` 并关闭异常/RTTI，**工具链沿用工程原有那套**。
+6. 工程配置按 [toolchains.md](../.github/skills/mcu-baremetal-event-loop/references/toolchains.md) 设置：`srcDirs` 加 `app/`、`bsp/`、`devices/`、`port/`，`incList` 加仓库根目录与 `devices/`，C++ 用 `c++17` 并关闭异常/RTTI，**工具链沿用工程原有那套**。
 
 详细规则与反模式见 [SKILL.md](../.github/skills/mcu-baremetal-event-loop/SKILL.md)。

@@ -1,24 +1,52 @@
 ---
 name: mcu-baremetal-event-loop
-description: '编写或改造裸机 MCU（Cortex-M / STM32 / PY32 / 嵌入式 C++）代码时使用本仓库（queue.hpp、stream_buffer.hpp、timers.hpp、irq_lock.hpp）已有的工程模式：中断只投递事件、由 Application 的事件循环统一派发、BSP 层 Board 统一管理板级资源、静态内存、irq_lock 临界区、1ms 软件定时器。新建工程、换板、生成工程骨架时，以仓库自带范例 examples/py32f002b_start_kit 为模板复制 app/bsp/port 三层再替换实现。Use when adding peripherals, events, timers, UART protocols, drivers, BSP/board ports, scaffolding a new bare-metal project, configuring its EIDE project (eide.yml: srcDirs, incList, C++17/no-exceptions/no-rtti, keep the existing toolchain AC6/GCC, linker flags), or porting this library into an existing one, and generate code that follows these patterns instead of inventing new ones.'
-argument-hint: '要新增的外设 / 事件 / 定时任务，例如"加一个按键长按事件"'
+description: '编写或改造裸机 MCU（Cortex-M / STM32 / PY32 / 嵌入式 C++）代码时使用本仓库（queue.hpp、stream_buffer.hpp、timers.hpp、irq_lock.hpp）已有的工程模式：中断只投递事件、由 Application 的事件循环统一派发、BSP 层 Board 统一管理板级资源、静态内存、irq_lock 临界区、1ms 软件定时器。生成代码前先填写平台契约（MCU/器件头、中断原语、tick 来源、HAL、工具链），再按 templates/ 生成 app/bsp/devices/port，按 references/toolchains.md 配置 EIDE / Keil AC6 / GCC。Use when adding peripherals, events, timers, UART/串口 protocols, interrupts, drivers, BSP/board ports, scaffolding a new bare-metal project, configuring its toolchain (EIDE eide.yml, Keil MDK AC6, GCC), or porting this library into an existing one, and generate code that follows these patterns instead of inventing new ones.'
+argument-hint: '目标 MCU/工具链 + 要新增的外设 / 事件 / 定时任务，例如"STM32F407 + Keil AC6，加一个按键长按事件"'
 ---
 
-# 裸机事件驱动工程模式（non-os-mcu-cpp-utility 仓库）
+# 裸机事件驱动工程模式（平台无关核心）
 
-本仓库是 header-only 的 C++17 工具库，配套一套固定的工程骨架。**只要工程引用了本仓库的头文件，新增代码就必须沿用下面的模式**，不要引入 RTOS、动态内存或另一套事件机制。
+本技能只约束**工程结构与中断/主循环边界**，不绑定具体 MCU、厂商 HAL 或工具链：
 
-仓库自带一个可直接编译烧录的完整范例 [`examples/py32f002b_start_kit/`](../../../examples/py32f002b_start_kit/README.md)，新建工程或换板时以它为模板（见「用范例生成工程骨架」）。注意其中的 `Board` / `Serial` 是**某块板子的 BSP 产物**，换板时仍要按本文契约重写，不要直接复制。
+- 中断只做三件事：清标志、搬数据、投递事件；
+- `Application` 是全工程唯一的事件循环；
+- `Board`（BSP）是板级资源与 HAL 回调的唯一入口；
+- `devices/` 只描述器件行为，不碰 HAL；
+- 静态内存 + `irq_lock` 保护共享状态。
 
-## 何时使用
+平台差异放在 `references/`，可复制骨架放在 `templates/`。生成代码前先读
+[references/platform-profile.md](./references/platform-profile.md)，完成平台契约，再开始写代码。
 
-- 工程中包含 `queue.hpp` / `stream_buffer.hpp` / `timers.hpp` / `irq_lock.hpp`
-- 要新增外设、事件、定时任务、串口协议处理
-- 要把厂商 HAL（CubeMX、PY32 HAL 等）工程改造成本模式
-- 要把本仓库移植到新的 MCU
-- **要新建工程 / 换一块板子 / 从零搭框架** —— 直接以仓库范例为模板生成，见下一节
+## 使用顺序（强制）
 
-## 用范例生成工程骨架
+1. 从需求/仓库识别：MCU、内核、厂商 HAL/SDK、工程来源、工具链、1 ms tick 来源。
+2. 阅读器件头与 HAL 文档，填写 `references/platform-profile.md` 中的契约。
+3. 完成唯一移植点 `port/mcu_cmsis.h` 与 tick 接入（见 `references/porting.md`）。
+4. 以 `templates/`（或 `examples/` 中的完整范例）生成 `app/bsp/devices/port`；
+   `Core/`、`Drivers/`、启动文件、链接脚本交给厂商工具生成，不要复制。
+5. 按 `references/toolchains.md` 配置 EIDE / Keil / GCC，**沿用工程原有工具链**。
+6. 按 `checklists/bring-up.md` 逐项核对，并用实际工具链编译、上电 smoke test。
+
+**不确定的平台语义不许猜。** 查不到就标 TODO 并向用户确认。
+
+## 平台契约（生成代码前的硬门槛）
+
+| 契约项 | 为什么必须确认 | 典型取值 |
+| --- | --- | --- |
+| MCU / 内核 | 决定 CMSIS 头、FPU、中断原语 | Cortex-M0+ / M4F |
+| CMSIS 器件头 | `mcu_cmsis.h` 的唯一内容 | `py32f0xx.h` / `stm32f4xx.h` |
+| 中断原语 | `irq_lock` 能否直接工作 | `__get_PRIMASK` 等是否可用 |
+| tick 来源 / 频率 | `timer` 依赖 1 ms | SysTick / TIMx |
+| tick 接入点 | 避免重复定义 | `HAL_IncTick` / 中断入口 |
+| HAL / LL | 决定 BSP 写法与回调名 | 厂商与版本 |
+| 中断优先级 | 决定回调能否安全投递 | NVIC 分组 / 抢占优先级 |
+| 内存 / 链接 | 静态分配与栈大小 | `.ld` / `.sct` |
+| 工具链 | 决定启动文件与编译参数 | AC6 / GCC |
+| 工程文件 | 必须与工具链一致 | `eide.yml` / `.uvprojx` |
+
+完整模板与逐项查证方法见 [references/platform-profile.md](./references/platform-profile.md)。
+
+## 用范例或模板生成工程骨架
 
 仓库自带两个完整范例，**按工程原有工具链挑一个**：
 
@@ -48,211 +76,16 @@ argument-hint: '要新增的外设 / 事件 / 定时任务，例如"加一个按
 3. 按目标板重写 `bsp/board.*` 与驱动（串口、按键、LED…），保持 `Board` 单例与"读 / 写 / 注册通知"契约；`devices/` 只保留与 MCU 无关的抽象，板级细节一律留在 BSP。范例里的 `usart.h` / `iwdg.h` 是厂商文件，换板时换成新工程的初始化头；目标工程没有 IWDG 时删掉 `RefreshWatchdog()` 与喂狗定时器。
 4. 修改 `app/application.*` 的事件号、`QueueItem` 载荷与 handler。
 5. 在 1ms 中断里调用 `timer::OnMilliSecondTick()`。
-6. 工程配置：**先确认工程原有工具链并沿用**（Keil / CubeMX 导入的 MDK-ARM 工程用 AC6，GCC 工程用 GCC），再按下面「EIDE 工程配置」设置 `srcDirs` / `incList` / C++17 选项与链接参数，改完必须用该工具链实际编译一次。
+6. 工程配置：**先确认工程原有工具链并沿用**（Keil / CubeMX 导入的 MDK-ARM 工程用 AC6，GCC 工程用 GCC），再按 [references/toolchains.md](./references/toolchains.md) 设置 `srcDirs` / `incList` / C++17 选项与链接参数，改完必须用该工具链实际编译一次。
 
 生成的代码必须同时满足下面的铁律、分层与命名约定；范例只是骨架，业务逻辑要按需求重新实现。
 
-## EIDE 工程配置
-
-EIDE 工程目录固定为 `<project>/EIDE`，`app/`、`bsp/`、`port/` 与厂商生成的 `Core/`、`Drivers/` 平级。所有配置都在 `<project>/EIDE/.eide/eide.yml` 里，**直接改这个文件**，不要只靠 UI 点击。
-
-### 工具链必须沿用工程现状
-
-EIDE 只是工程壳，**工具链由工程来源决定，不要擅自替换**：
-
-| 工程来源（判断依据） | `toolchain` | 启动文件 | 链接脚本 |
-|---|---|---|---|
-| Keil MDK / CubeMX 生成的 `MDK-ARM/*.uvprojx` | `AC6`（Keil armclang） | `../MDK-ARM/startup_*.s`（ARM 语法） | `useCustomScatterFile: false`，EIDE 按 `storageLayout` 生成 `.sct` |
-| CubeMX 生成 Makefile，或工程里已有 `*.ld` | `GCC`（arm-none-eabi-gcc） | CMSIS `Source/Templates/gcc/startup_*.s` | 厂商 `.ld`，`useCustomScatterFile: true` |
-
-- 从 Keil 导入的工程改成 GCC，等于同时换掉启动文件、链接脚本和 HAL 编译选项；用户还要继续用 Keil 维护，**不要做**。
-- 反过来，GCC 模板工程也不要改成 AC6。只有用户明确要求换工具链时才切换，并且启动文件、链接脚本、验证方式要一起换。
-- `storageLayout` 按芯片真实内存填写（例：STM32F407ZG 为 `IRAM 0x20000000 + 0x20000`、`IROM 0x08000000 + 0x100000`），不要照抄模板里的近似值。
-
-### 源目录与排除
-
-```yaml
-srcDirs:
-  - ../app
-  - ../bsp
-  - ../port
-  - ../non-os-mcu-cpp-utility                 # 仓库根目录：header-only，只为了让头文件出现在工程树
-targets:
-  Debug:
-    excludeList:
-      - ../non-os-mcu-cpp-utility/examples    # 必须排除，否则范例的 .cpp 会被一起编译
-```
-
-- 仓库根目录可以放进 `srcDirs`，但**必须同时用 `excludeList` 排除 `examples/**`**；不想这样做就只保留在 `incList`。
-- `Core/`、`Drivers/`、`startup_*.s` 用 `virtualFolder` 引用，不要复制。
-- `port/` 里只有 `mcu_cmsis.h`，加进 `srcDirs` 只是方便查看，不会有编译产物。
-
-### include 路径与宏
-
-```yaml
-targets:
-  Debug:
-    cppPreprocessAttrs:
-      defineList:
-        - PY32F002Bx5
-        - USE_HAL_DRIVER
-      incList:
-        - ../Core/INC
-        - ../Drivers/CMSIS/Include
-        - ../Drivers/PY32F002B_HAL_Driver/Inc
-        - ../Drivers/CMSIS/Device/PY32F0xx/Include
-        - ../app
-        - ../bsp
-        - ../non-os-mcu-cpp-utility
-        - ../port
-```
-
-`../port` 不能漏：`irq_lock.hpp` 通过它找到 `mcu_cmsis.h`。
-
-### 编译与链接选项（AC6 / Keil armclang）
-
-| 字段 | 值 | 原因 |
-|---|---|---|
-| `toolchain` | `AC6` | 与 MDK-ARM 工程保持一致 |
-| `toolchainConfigMap.AC6.cpuType` / `floatingPointHardware` | `Cortex-M4` / `single` | 按器件填写 |
-| `c/cpp-compiler.language-c` | `c99` | 与 CubeMX 生成时保持一致 |
-| `c/cpp-compiler.language-cpp` | `c++17` | `timers.hpp` 使用 inline 静态成员 |
-| `c/cpp-compiler.CXX_FLAGS` | `-fno-exceptions -fno-rtti` | 裸机不引入异常与 RTTI |
-| `c/cpp-compiler.one-elf-section-per-function` | `true` | 配合链接期裁剪 |
-| `c/cpp-compiler.warnings` | `ac5-like-warnings` | 容忍厂商 HAL 的告警 |
-| `linker.misc-controls` | `--diag_suppress=L6329` | 抑制 armlink 的 RWX 段告警 |
-| `useCustomScatterFile` | `false` | 由 EIDE 按 `storageLayout` 生成 `.sct` |
-
-**不要**把 GCC 专用参数（`--specs=nosys.specs`、`-Wl,...`、`-Wno-register`）或 GCC 的配置键（`global.no-exceptions`、`global.misc-control` 等）套到 AC6 上；反过来，AC6 的 `CXX_FLAGS` / `misc-controls` 也不要写进 GCC 工程——两套参数互不识别。
-
-### 编译与链接选项（GCC）
-
-| 字段 | 值 | 原因 |
-|---|---|---|
-| `toolchain` | `GCC` | 仅用于 GCC 工程 |
-| `c/cpp-compiler.language-c` | `c11` | 厂商 HAL 源码 |
-| `c/cpp-compiler.language-cpp` | `c++17` | `timers.hpp` 使用 inline 静态成员 |
-| `global.no-exceptions` / `global.no-rtti` | `true` | 裸机不引入异常与 RTTI |
-| `global.one-elf-section-per-function/-data` | `true` | 配合链接期裁剪 |
-| `global.misc-control` | `--specs=nosys.specs --specs=nano.specs` | 无系统调用、精简 libc |
-| `global.LD_FLAGS` | `-Wl,--no-warn-rwx-segments` | 消除 binutils ≥ 2.39 的 RWX 段告警 |
-| `linker.remove-unused-input-sections` | `true` | `--gc-sections` |
-| `useCustomScatterFile` / `scatterFilePath` | `true` / 厂商 `.ld` | 由 MCU Studio 生成，不要手写 |
-
-GCC 的 `no-exceptions` / `no-rtti` / `one-elf-section-*` 属于 `global` 组，放在 `c/cpp-compiler` 下会被 EIDE 忽略。
-
-`uploadConfigMap` 与 `.vscode/tasks.json` 里的 ELF 路径必须与 EIDE 输出名（`build/<target>/<name>.elf`）一致。
-
-### 改完必须验证
-
-**用工程自己的工具链验证**，不要拿另一套工具链的编译结果代替：
-
-- **AC6 工程**：在 EIDE 里执行 build（或直接跑 `unify_builder -p build/<target>/builder.params --rebuild`），日志必须出现 `build successfully !`；同时核对 `build/<target>/<name>.sct` 的 RAM/ROM 与芯片一致。手动单文件验证用：
-
-  ```powershell
-  armclang --target=arm-arm-none-eabi -mcpu=cortex-m4 -mfpu=fpv4-sp-d16 -mfloat-abi=hard `
-    -c -std=c++17 -fno-exceptions -fno-rtti -DUSE_HAL_DRIVER -DSTM32F407xx `
-    -I../Core/Inc -I../Drivers/CMSIS/Include -I../Drivers/STM32F4xx_HAL_Driver/Inc `
-    -I../app -I../bsp -I../non-os-mcu-cpp-utility -I../port `
-    ../app/application.cpp -o application.o
-  ```
-
-- **GCC 工程**：按 `eide.yml` 的同一组参数手动编译一次：
-
-  ```powershell
-  arm-none-eabi-g++ -std=c++17 -fno-exceptions -fno-rtti -Wno-register `
-    -mcpu=cortex-m0plus -mthumb -DPY32F002Bx5 -DUSE_HAL_DRIVER `
-    -I../Core/INC -I../Drivers/CMSIS/Include -I../Drivers/PY32F002B_HAL_Driver/Inc `
-    -I../Drivers/CMSIS/Device/PY32F0xx/Include -I../app -I../bsp `
-    -I../non-os-mcu-cpp-utility -I../port `
-    -c ../app/application.cpp -o application.o
-  ```
-
-  链接阶段再补 `-T<链接脚本> --specs=nosys.specs --specs=nano.specs -Wl,--gc-sections`。
-
-完整 `eide.yml` 片段（GCC 与 AC6 两版）见 [references/adapter-templates.md](./references/adapter-templates.md) §9。
-
-## Keil MDK 工程配置（AC6）
-
-从 Keil 导入的工程通常**同时保留 `MDK-ARM/*.uvprojx`**，改代码后用户还要用 Keil 打开，所以这份工程必须一起改好，不能只改 EIDE。
-
-### 1. 确认真的切到了 AC6
-
-编译器选择写在 `<Target>` 下、`<TargetOption>` **之外**：
-
-```xml
-<Target>
-  <TargetName>stm32f407_start_kit</TargetName>
-  <ToolsetNumber>0x4</ToolsetNumber>
-  <ToolsetName>ARM-ADS</ToolsetName>
-  <pCCUsed>6140001::V6.14.1::ARMCLANG</pCCUsed>
-  <uAC6>1</uAC6>
-  <TargetOption>
-    <TargetCommonOption>
-      ...
-```
-
-- `<uAC6>1</uAC6>` 放进 `<TargetCommonOption>` **无效**——µVision 仍会用 AC5，随后因 `-fno-exceptions` 报 `C3900U: Unrecognized option`。
-- `<pCCUsed>` 的版本号与本机 AC6 不一致时，µVision 首次打开会自动修正，不必手改。
-
-### 2. 把 C++ 源文件加进工程
-
-`Groups` 里新建一个组，C++ 源文件用 `FileType 8`：
-
-```xml
-<Group>
-  <GroupName>Application/App</GroupName>
-  <Files>
-    <File>
-      <FileName>application.cpp</FileName>
-      <FileType>8</FileType>
-      <FilePath>../app/application.cpp</FilePath>
-    </File>
-    <File>
-      <FileName>board.cpp</FileName>
-      <FileType>8</FileType>
-      <FilePath>../bsp/board.cpp</FilePath>
-    </File>
-  </Files>
-</Group>
-```
-
-### 3. include 路径与编译选项
-
-```xml
-<Cads>
-  <v6Lang>5</v6Lang>            <!-- C++ 标准：沿用 CubeMX 生成值；本机 AC6 6.14 下 C++17 inline 静态成员可编译 -->
-  <v6LangP>3</v6LangP>
-  <v6Rtti>0</v6Rtti>
-  <VariousControls>
-    <MiscControls>-fno-exceptions</MiscControls>
-    <Define>USE_HAL_DRIVER,STM32F407xx</Define>
-    <IncludePath>../Core/Inc;../Drivers/STM32F4xx_HAL_Driver/Inc;../Drivers/STM32F4xx_HAL_Driver/Inc/Legacy;../Drivers/CMSIS/Device/ST/STM32F4xx/Include;../Drivers/CMSIS/Include;../app;../bsp;../port;../non-os-mcu-cpp-utility</IncludePath>
-  </VariousControls>
-</Cads>
-```
-
-- `IncludePath` 必须追加 `../app;../bsp;../port;../non-os-mcu-cpp-utility`，否则 `board.hpp`、`queue.hpp`、`mcu_cmsis.h` 找不到。
-- `<v6Rtti>0</v6Rtti>` 关闭 RTTI；异常用 `<MiscControls>-fno-exceptions</MiscControls>` 关闭。
-- 工程里若还有 `-Wno-register`、`--specs=*`、`-Wl,*` 等 GCC 选项，一并删掉。
-
-### 4. 验证
-
-```powershell
-& "C:\Keil_v5\UV4\UV4.exe" -b <project>\MDK-ARM\<name>.uvprojx -j0 -o build.log
-```
-
-构建日志必须满足：
-
-- 首部 `C Compiler: Armclang.exe ...`（不是 `Armcc.exe`）；
-- 结尾 `0 Error(s)`，且生成 `MDK-ARM/<name>/<name>.axf`。
-
-`C:\Keil_v5\UV4\UV4.exe -b` 的退出码为 0 不一定代表构建成功（有 warning 时也是 0），**以日志里的 `n Error(s)` 为准**。
+也可以直接从 [templates/](./templates/README.md) 复制骨架；两者语义一致，模板不含具体板级实现。
 
 ## 三条铁律
 
 1. **中断只做三件事**：清标志、搬数据、投递事件（`push`）。禁止在 ISR 里延时、阻塞发送、`printf`、跑业务循环。
-2. **静态内存**：禁止 `new` / `malloc` / `std::vector` / `std::string` / `std::function` / 智能指针。对象只能是全局、函数内 `static` 或成员。
+2. **静态内存**：禁止 `new` / `malloc` / `std::vector` / `std::string` / `std::function` / 智能指针。对象只能是全局、命名空间作用域静态或成员；不要用函数内 `static`（会引入 `__cxa_guard`，且首次访问若发生在 ISR 里就等于在中断里初始化外设）。
 3. **共享可变状态一律用 `irq_lock`**：临界区只包住几条语句，不要在里面调用 HAL 阻塞接口。
 
 ## 分层与依赖方向
@@ -280,26 +113,32 @@ app → bsp → devices → utility → port → CMSIS
 
 **本仓库不提供 `Serial` / `Timer` 这类具体驱动实现。** 每块板子的串口数量、DMA 能力、HAL 版本都不同，BSP 自己实现即可；需要复用的是下面的骨架与约束，不是某份实现代码。
 
+> 平台相关的移植、工具链与回调上下文见 [references/porting.md](./references/porting.md) 和
+> [references/toolchains.md](./references/toolchains.md)；可复制骨架见
+> [templates/](./templates/README.md)。
+
+## 平台适配与工具链
+
+平台相关的移植、EIDE / Keil MDK / GCC 配置已经拆到 references：
+
+- 移植点、中断原语、1 ms tick、回调上下文 → [references/porting.md](./references/porting.md)
+- EIDE / Keil MDK（AC6）/ GCC 配置与验证 → [references/toolchains.md](./references/toolchains.md)
+- 平台契约模板 → [references/platform-profile.md](./references/platform-profile.md)
+
+本文件只保留平台无关的结构与并发约束。
+
 ## 移植三步
 
-1. 提供 `mcu_cmsis.h`，内容就是所选器件的 CMSIS 头，例如 `#include "py32f0xx.h"` 或 `#include "stm32f1xx.h"`。
-2. 保证 `irq_lock` 可用：Cortex-M 直接可用（仓库现状就是 `PRIMASK`）。目标器件头里没有 `__get_PRIMASK` / `__disable_irq` / `__set_PRIMASK` 时，**不要改 `irq_lock.hpp`**，而是在 `mcu_cmsis.h` 里转接到该平台的中断控制原语：
+移植只发生在 `port/mcu_cmsis.h` 与 tick 接入点，完整说明见
+[references/porting.md](./references/porting.md)：
 
-   ```cpp
-   // mcu_cmsis.h
-   #pragma once
+1. 提供 `port/mcu_cmsis.h`，include 目标器件的 CMSIS 头；
+2. 目标平台没有 `__get_PRIMASK` / `__disable_irq` / `__set_PRIMASK` 时，
+   在 `mcu_cmsis.h` 里补齐同名转接，**不要改 `irq_lock.hpp`**；
+3. 在 1 ms 中断里调用一次 `timer::OnMilliSecondTick()`。
 
-   #include "xxx_device.h"
-
-   // 厂商头没有 CMSIS 风格内建函数时，在这里补齐同名转接
-   static inline uint32_t __get_PRIMASK() { return xxx_get_irq_state(); }
-   static inline void __disable_irq() { xxx_disable_irq(); }
-   static inline void __set_PRIMASK(uint32_t state) { xxx_restore_irq(state); }
-   ```
-
-3. 把 tick 接进来：在 1ms 中断里调用 `timer::OnMilliSecondTick()`（SysTick 或 TIM 均可）。
-
-> **接入方式**：本仓库只有头文件，加入工程的 **include 路径**即可（如 EIDE 的 `incList`）。不要把仓库目录同时加进 `srcDirs`（源目录扫描），否则 `examples/` 下的范例会被重复编译；工程必须扫描该目录时，用 `excludeList` 排除 `examples/**`。
+> 本仓库是 header-only，加入工程的 **include 路径**即可。若必须加入 `srcDirs`，
+> 用 `excludeList` 排除 `examples/**`，否则范例的 `.cpp` 会被重复编译。
 
 ## Application：事件循环与投递
 
@@ -556,10 +395,6 @@ bool Read() const override {
 | 多个模块各自抢 `HAL_*_Callback` | 统一由 `Board` 分发或注册回调 |
 | 用 `HAL_UART_Receive_IT` 却实现 `HAL_USART_RxCpltCallback` | 回调名与所用 HAL API 对齐（UART → `HAL_UART_RxCpltCallback`） |
 | 厂商工程已启动 IWDG 却不喂狗 | 用 `timer` 周期投递事件，在 handler 里调用 `Board::RefreshWatchdog()` |
-| EIDE 把仓库根目录加进 `srcDirs` 却不排除 `examples/**` | 加 `excludeList`，或只把仓库根目录放进 `incList` |
-| 从 Keil / CubeMX(MDK-ARM) 导入的工程把 EIDE 工具链改成 GCC（或反向） | 沿用原工具链：AC6 用 `../MDK-ARM/startup_*.s` + EIDE 生成的 `.sct`，GCC 才用 CMSIS gcc 启动文件和 `.ld` |
-| `<uAC6>1</uAC6>` 写进 `<TargetCommonOption>` | 必须写在 `<Target>` 下（与 `<pCCUsed>` 同级），否则 µVision 继续用 AC5 |
-| 只改 EIDE 不管 `MDK-ARM/*.uvprojx` | Keil 工程也要加 `app/`、`bsp/`、`port/` 源文件与 include 路径，否则用户用 Keil 打开直接编译失败 |
 | `devices/` 里 include 厂商 HAL、写死引脚号 / 极性 | `devices/` 只描述器件行为；引脚、极性、初始化全部留在 `bsp/` |
 | 在驱动构造里 `HAL_GPIO_Init`、在析构里 `HAL_GPIO_DeInit` | 初始化归 `Board`（先使能时钟再配引脚），驱动只读写电平；静态对象永不析构，DeInit 只会拖入 `__cxa_atexit` |
 | `Board::GetXxx()` 内用函数内 `static` 首次构造外设 | 用命名空间作用域 / `Board` 成员静态对象，在开中断前完成构造（避免 `__cxa_guard` 与 ISR 内初始化） |
@@ -567,8 +402,16 @@ bool Read() const override {
 | 在器件基类构造函数里调用纯虚 `Read()` / `SetIo()` 取初值 | 提供 `Start()`，由 `Board` 在引脚配置完成后调用；基类构造期间调用纯虚函数是 UB |
 | ISR 里触发单例首次构造 | 在开中断前完成所有单例初始化 |
 
-## 完整模板
+## 参考与模板索引
 
-`Board` 契约、`Application` 事件循环、电平事件位图、`main()` 集成与检查清单在 [references/adapter-templates.md](./references/adapter-templates.md)。模板中的 `Serial` / `Timer` 只作为接口命名示意，**不要复制其实现**——那是某块板子的 BSP 产物。
+| 文件 | 用途 |
+| --- | --- |
+| `references/platform-profile.md` | 平台契约模板、逐项查证方法、未确认项的后果 |
+| `references/porting.md` | `mcu_cmsis.h`、中断原语转接、1 ms tick、回调上下文 |
+| `references/toolchains.md` | EIDE、Keil MDK AC6、GCC 配置与验证 |
+| `references/adapter-templates.md` | Board / Application / 事件位图 / 队列容量等契约与设计说明 |
+| `templates/` | 可复制的 port / app / bsp / devices / utility 骨架 |
+| `checklists/bring-up.md` | 移植、结构、内存、分层、工程配置检查清单 |
+| `examples/` | PY32F002B（GCC）与 STM32F407（Keil AC6）完整范例 |
 
-需要完整可运行的例子时，直接看仓库的 [`examples/py32f002b_start_kit/`](../../../examples/py32f002b_start_kit/README.md)：它把定时器、串口、BSP 和事件循环串成了一条可编译的链路。
+**记住**：核心规则是平台无关的；平台语义必须通过契约确认，不要凭记忆或旧工程经验生成代码。

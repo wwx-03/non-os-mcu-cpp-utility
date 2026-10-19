@@ -89,7 +89,7 @@ EIDE 首次构建时会根据 `eide.yml` 生成 `build/Debug/builder.params` 与
    - `<pCCUsed>` + `<uAC6>1</uAC6>` 放在 `<Target>` 下（不是 `<TargetCommonOption>` 里），否则 µVision 仍用 AC5；
    - `IncludePath` 追加 `../app;../bsp;../port;../devices;../non-os-mcu-cpp-utility`；
    - `Groups` 里新增一个组，把 `../app/application.cpp`、`../bsp/board.cpp` 以 `FileType 8`（C++ Source）加入；
-4. `EIDE/.eide/eide.yml` 按本目录的 `AC6` 配置改写（`toolchain: AC6`、`useCustomScatterFile: false`，`srcDirs`/`incList` 含 `../devices`），详见仓库 `SKILL.md` 的「EIDE 工程配置」。
+4. `EIDE/.eide/eide.yml` 按本目录的 `AC6` 配置改写（`toolchain: AC6`、`useCustomScatterFile: false`，`srcDirs`/`incList` 含 `../devices`），详见仓库 [references/toolchains.md](../../.github/skills/mcu-baremetal-event-loop/references/toolchains.md)。
 
 ## 注意
 

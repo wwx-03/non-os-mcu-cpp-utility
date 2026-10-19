@@ -10,7 +10,7 @@
 | `stream_buffer.hpp` | `stream_buffer<N>`：字节流环形缓冲，适用于串口等外设收发的字节流 |
 | `timers.hpp` | `timer`：静态链表软件定时器，支持周期/单次触发、启停、改周期 |
 | `irq_lock.hpp` | `irq_lock`：RAII 临界区（Cortex-M 用 `PRIMASK`） |
-| `.github/skills/` | Agent Skill：让 AI 按本仓库的模式生成代码 |
+| `.github/skills/` | Agent Skill：平台无关规则 + `references/`（平台契约、移植、工具链）+ `templates/`（可复制骨架）+ `checklists/` |
 | `examples/py32f002b_start_kit/` | 可直接编译烧录的完整范例工程（PY32F002B Start Kit） |
 
 所有容器与定时器都受 `irq_lock` 保护，可在主循环和中断之间安全共用；对象是静态的，不做任何堆分配。
@@ -21,7 +21,7 @@
 
 把本目录加入工程的 include 路径（EIDE 的 `incList`）即可，不需要编译任何 `.cpp`。
 
-也可以把本目录加进 EIDE 的 `srcDirs`，方便在工程树里浏览头文件；但**必须同时用 `excludeList` 排除 `examples/**`**，否则范例的 `.cpp` 会被重复编译。各字段的取值见 [SKILL.md](./.github/skills/mcu-baremetal-event-loop/SKILL.md) 的「EIDE 工程配置」。
+也可以把本目录加进 EIDE 的 `srcDirs`，方便在工程树里浏览头文件；但**必须同时用 `excludeList` 排除 `examples/**`**，否则范例的 `.cpp` 会被重复编译。各字段的取值见 [toolchains.md](./.github/skills/mcu-baremetal-event-loop/references/toolchains.md)。
 
 ### 2. 提供 MCU 桥接头（唯一的移植点）
 
@@ -33,7 +33,7 @@
 #include "py32f0xx.h"   // 换成你的器件头，例如 "stm32f1xx.h"
 ```
 
-如果器件头里没有 `__get_PRIMASK` / `__disable_irq` / `__set_PRIMASK`，**不要改 `irq_lock.hpp`**，直接在这个头里补齐同名转接（参见 [SKILL.md](./.github/skills/mcu-baremetal-event-loop/SKILL.md) 的"移植三步"）。
+如果器件头里没有 `__get_PRIMASK` / `__disable_irq` / `__set_PRIMASK`，**不要改 `irq_lock.hpp`**，直接在这个头里补齐同名转接（参见 [porting.md](./.github/skills/mcu-baremetal-event-loop/references/porting.md)）。
 
 ### 3. 接入 1ms tick
 
@@ -109,8 +109,13 @@ int main()
 
 新增外设、事件、定时任务时请沿用该模式，不要在一个工程里混用 RTOS、动态内存或另一套事件机制。完整的规则、反模式和代码模板见：
 
-- [SKILL.md](./.github/skills/mcu-baremetal-event-loop/SKILL.md)
-- [adapter-templates.md](./.github/skills/mcu-baremetal-event-loop/references/adapter-templates.md)
+- [SKILL.md](./.github/skills/mcu-baremetal-event-loop/SKILL.md)：平台无关核心
+- [platform-profile.md](./.github/skills/mcu-baremetal-event-loop/references/platform-profile.md)：平台契约
+- [porting.md](./.github/skills/mcu-baremetal-event-loop/references/porting.md)：移植与中断接入
+- [toolchains.md](./.github/skills/mcu-baremetal-event-loop/references/toolchains.md)：EIDE / Keil AC6 / GCC
+- [adapter-templates.md](./.github/skills/mcu-baremetal-event-loop/references/adapter-templates.md)：Board / Application / 位图 / 队列容量等契约与设计说明
+- [templates/](./.github/skills/mcu-baremetal-event-loop/templates/README.md)：可复制的代码骨架
+- [bring-up.md](./.github/skills/mcu-baremetal-event-loop/checklists/bring-up.md)：上板检查清单
 
 ## 让 AI 按本仓库的模式生成代码
 
@@ -142,7 +147,7 @@ VS Code 多根工作区会扫描每个文件夹根目录下的 `.github/skills/`
 
 ### 方式 C：合并进工程级说明
 
-没有 Skill 机制时，可把 `SKILL.md` 与 `references/adapter-templates.md` 的正文并入工程的 `AGENTS.md` 或 `.github/copilot-instructions.md`。
+没有 Skill 机制时，可把 `SKILL.md`、`references/`、`templates/` 与 `checklists/` 的正文并入工程的 `AGENTS.md` 或 `.github/copilot-instructions.md`。
 
 ### 如何确认生效
 
@@ -163,8 +168,14 @@ non-os-mcu-cpp-utility/
 ├── README.md
 ├── .gitignore
 ├── .github/skills/mcu-baremetal-event-loop/
-│   ├── SKILL.md
-│   └── references/adapter-templates.md
+│   ├── SKILL.md                        # 平台无关核心
+│   ├── references/
+│   │   ├── platform-profile.md         # 平台契约模板
+│   │   ├── porting.md                  # mcu_cmsis / tick / 回调上下文
+│   │   ├── toolchains.md               # EIDE / Keil AC6 / GCC
+│   │   └── adapter-templates.md        # Board/Application 契约与设计说明
+│   ├── templates/                      # 可复制的 port/app/bsp/devices/utility 骨架
+│   └── checklists/bring-up.md          # 上板检查清单
 └── examples/
     ├── README.md
     ├── py32f002b_start_kit/            # GCC / EIDE 模板

@@ -110,3 +110,16 @@
 - `references/adapter-templates.md` 检查清单补充"基类构造函数不调纯虚函数"。
 - 修正 `Button` 实现自身的缺陷：构造函数不再调用纯虚 `Read()`（UB），改为显式 `Start()`；`last_` 初始化，析构改为 protected 非虚。
 - 范例 `stm32f407_start_kit` 同步按键实现与文档。
+
+## 0012 — 2026-10-19
+
+### 修改
+- 按「平台无关核心 + references + templates + checklists」重构 Agent Skill，避免把 MCU / HAL / 工具链细节继续堆在 `SKILL.md` 里。
+  - `SKILL.md` 精简为平台无关的工程结构与并发边界，新增「使用顺序」「平台契约」和「参考与模板索引」；EIDE、Keil MDK、移植细节移出正文。
+  - 修正「静态内存」铁律与 devices 章节的冲突：对象只用全局 / 命名空间作用域静态 / 成员，不使用函数内 `static`。
+- 新增 `references/platform-profile.md`：裸机平台契约模板、逐项查证方法与未确认项的后果。
+- 新增 `references/porting.md`：`mcu_cmsis.h`、中断原语转接、1 ms tick 接入、HAL 回调上下文与 include/srcDirs 注意事项。
+- 新增 `references/toolchains.md`：从 `SKILL.md` 移入 EIDE、Keil MDK（AC6）、GCC 配置与验证方法，并补充工具链相关反模式。
+- 新增 `templates/`：`port/mcu_cmsis.h`、`app/application.*`、`bsp/board.*`、`devices/led.hpp`、`devices/button.hpp`、`bsp/gpio_led.hpp`、`bsp/gpio_button.hpp`、`utility/pending_events.hpp` 及复制说明。
+- 新增 `checklists/bring-up.md`：移植、事件链路、内存并发、分层、工程配置与上板验证清单。
+- 更新 `README.md`：补充 references / templates / checklists 说明与目录结构，链接改到新的 reference 文件。
