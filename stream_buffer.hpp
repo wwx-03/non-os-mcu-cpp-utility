@@ -1,3 +1,6 @@
+// SPDX-License-Identifier: MIT
+// Copyright (c) 2026 wwx-03
+
 #pragma once
 
 #include <stddef.h>

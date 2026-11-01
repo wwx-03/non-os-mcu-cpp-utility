@@ -186,3 +186,10 @@
 - `references/platform-profile.md`：去掉 Layered / DIP / Hybrid 选型，改为读厂商基线的契约表。
 - `references/porting.md`、`references/toolchains.md`：路径从 `app/bsp/port/devices` 改为 `main/` 与 `main/board/`。
 - `README.md`：同步新 API 与目录结构，移除范例工程与架构模式章节。
+
+## 0015 — 2026-11-02
+
+### 新增
+- `LICENSE`：MIT 许可证，版权署名 `wwx-03`。
+- 四个头文件顶部加 SPDX 头：`// SPDX-License-Identifier: MIT` + 版权行。
+- `README.md` 新增「许可证」一节。

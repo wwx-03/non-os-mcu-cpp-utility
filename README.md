@@ -103,6 +103,10 @@ utility/
     └── references/{platform-profile,porting,toolchains}.md
 ```
 
+## 许可证
+
+[MIT](./LICENSE) © 2026 wwx-03
+
 ## 变更
 
 见 [changes.md](./changes.md)。
