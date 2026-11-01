@@ -1,21 +1,21 @@
 # 移植与中断接入
 
-本文件说明本仓库唯一的平台依赖点（`port/mcu_cmsis.h`）、1 ms tick 接入方式，以及
+本文件说明本仓库唯一的平台依赖点（`main/mcu_cmsis.h`）、1 ms tick 接入方式，以及
 HAL 回调的上下文约束。平台契约见 [platform-profile.md](./platform-profile.md)。
 
-## 1. 唯一的移植点：`port/mcu_cmsis.h`
+## 1. 唯一的移植点：`main/mcu_cmsis.h`
 
 `irq_lock.hpp` 只依赖 `mcu_cmsis.h`。目标工程必须提供这个文件：
 
 ```cpp
-// port/mcu_cmsis.h
+// main/mcu_cmsis.h
 #pragma once
 
 // 换 MCU 时只改这一行
 #include "py32f0xx.h"   // 或 "stm32f1xx.h" / "stm32f4xx.h" ...
 ```
 
-`utility/` 层的 `queue`、`stream_buffer`、`timer`、`irq_lock` 都**不应该**知道具体 MCU。
+`utility/` 层的 `Queue`、`StreamBuffer`、`Timer`、`IrqLock` 都**不应该**知道具体 MCU。
 
 ## 2. 中断控制原语
 
@@ -29,7 +29,7 @@ Cortex-M 的 CMSIS 头通常已经提供：
 **不要修改 `irq_lock.hpp`**，而是在 `mcu_cmsis.h` 里补齐同名转接：
 
 ```cpp
-// port/mcu_cmsis.h
+// main/mcu_cmsis.h
 #pragma once
 
 #include "xxx_device.h"
@@ -39,13 +39,13 @@ static inline void __disable_irq() { xxx_disable_irq(); }
 static inline void __set_PRIMASK(uint32_t state) { xxx_restore_irq(state); }
 ```
 
-这样 `irq_lock` 的 RAII 语义保持不变，`utility` 层不需要为任何平台分叉。
+这样 `IrqLock` 的 RAII 语义保持不变，`utility` 层不需要为任何平台分叉。
 
-> `irq_lock` 只适用于单核裸机。多核共享数据必须使用平台提供的原子操作或硬件信号量。
+> `IrqLock` 只适用于单核裸机。多核共享数据必须使用平台提供的原子操作或硬件信号量。
 
 ## 3. 1 ms tick 接入
 
-`timer` 依赖一个稳定的 1 ms tick。接入点**全工程只能有一个**。
+`Timer` 依赖一个稳定的 1 ms tick。接入点**全工程只能有一个**。
 
 ### 3.1 厂商已定义 `SysTick_Handler`
 
@@ -61,20 +61,20 @@ extern "C" void HAL_IncTick(void)
 {
 	extern __IO uint32_t uwTick;
 	uwTick += uwTickFreq;          // HAL 自己的毫秒计数
-	timer::OnMilliSecondTick();    // 驱动所有软件定时器
+	Timer::OnMilliSecondTick();    // 驱动所有软件定时器
 }
 ```
 
 ### 3.2 使用独立 TIM 或自定义中断
 
 如果工程没有现成的 `SysTick_Handler`，或使用 TIM 产生 1 ms tick，可以直接在该中断
-入口里调用 `timer::OnMilliSecondTick()`：
+入口里调用 `Timer::OnMilliSecondTick()`：
 
 ```cpp
 extern "C" void TIMx_IRQHandler(void)
 {
 	// 清中断标志 ...
-	timer::OnMilliSecondTick();
+	Timer::OnMilliSecondTick();
 }
 ```
 
@@ -89,7 +89,7 @@ extern "C" void TIMx_IRQHandler(void)
 | 上下文 | 能否阻塞 | 该做什么 |
 | --- | --- | --- |
 | HAL UART / EXTI / TIM 回调 | 否 | 清标志、搬数据、调用上层注册的通知回调 |
-| `timer` 回调 | 否 | 只调用 `Application::PostXxx()` |
+| `Timer` 回调 | 否 | 只调用 `Application::PostXxx()` |
 | BSP 驱动通知回调 | 否 | 只上报"有数据 / 状态变化"，不解析协议 |
 | `Application` 事件 handler | 可以（但不建议久等） | 业务、状态机、调用 BSP 接口 |
 
@@ -102,21 +102,14 @@ extern "C" void TIMx_IRQHandler(void)
 4. 同一外设的 HAL 回调只能由 `Board` 实现一次，再按句柄 / 引脚路由，
    不要多个模块各自抢同一个弱符号。
 
-## 5. 接入方式：include 路径，不是源码目录
+## 5. 接入方式：include 路径
 
 本仓库是 header-only，正确做法是把仓库根目录加入 **include 路径**
 （例如 EIDE 的 `incList`），不需要编译任何 `.cpp`。
 
-如果工程必须把仓库根目录加入 `srcDirs`（源目录扫描），必须同时排除范例：
-
-```yaml
-targets:
-  Debug:
-    excludeList:
-      - ../non-os-mcu-cpp-utility/examples
-```
-
-否则 `examples/` 下的范例 `.cpp` 会被一起编译。
+工程需要把 `main/`、`main/board/`、`utility/` 都放进 include 路径：
+`irq_lock.hpp` 靠 `main/` 找到 `mcu_cmsis.h`，`board.cpp` 靠 `main/board/` 找到
+`#include "serial.hpp"` 之类的驱动头。
 
 ## 6. 验证
 
@@ -124,6 +117,6 @@ targets:
 
 - `mcu_cmsis.h` 指向正确的器件头；
 - 工程能以目标工具链编译通过（C++17，`-fno-exceptions -fno-rtti`）；
-- `SysTick_Handler` / `HAL_IncTick` / `timer::OnMilliSecondTick()` 只有一条调用链；
-- 上电后 `timer` 周期准确（用 GPIO 翻转或串口时间戳验证）；
+- `SysTick_Handler` / `HAL_IncTick` / `Timer::OnMilliSecondTick()` 只有一条调用链；
+- 上电后 `Timer` 周期准确（用 GPIO 翻转或串口时间戳验证）；
 - 中断里没有阻塞调用，队列 `dropped_` 计数可观测。

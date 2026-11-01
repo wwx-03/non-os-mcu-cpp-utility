@@ -7,11 +7,11 @@
 #include "irq_lock.hpp"
 
 template <size_t N>
-class stream_buffer {
+class StreamBuffer {
 public:
-	size_t write(const void *src, size_t size) {
-		irq_lock lock;
-		size_t space = space_unlocked();
+	size_t Write(const void *src, size_t size) {
+		IrqLock lock;
+		size_t space = SpaceUnlocked();
 		if (size > space) {
 			size = space;
 		}
@@ -34,9 +34,9 @@ public:
 
 	// 读取数据，返回实际读取的字节数
 	// 数据不足时读取部分数据并返回已读取量
-	size_t read(void *dest, size_t size) {
-		irq_lock lock;
-		size_t avail = size_unlocked();
+	size_t Read(void *dest, size_t size) {
+		IrqLock lock;
+		size_t avail = SizeUnlocked();
 		if (size > avail) {
 			size = avail;
 		}
@@ -58,9 +58,9 @@ public:
 	}
 
 	// 查看数据但不移动读指针
-	size_t peek(void *dest, size_t size) const {
-		irq_lock lock;
-		size_t avail = size_unlocked();
+	size_t Peek(void *dest, size_t size) const {
+		IrqLock lock;
+		size_t avail = SizeUnlocked();
 		if (size > avail) {
 			size = avail;
 		}
@@ -81,9 +81,9 @@ public:
 	}
 
 	// 丢弃已读取的数据
-	size_t skip(size_t size) {
-		irq_lock lock;
-		size_t avail = size_unlocked();
+	size_t Skip(size_t size) {
+		IrqLock lock;
+		size_t avail = SizeUnlocked();
 		if (size > avail) {
 			size = avail;
 		}
@@ -92,29 +92,29 @@ public:
 	}
 
 	// 查询状态
-	size_t size() const { irq_lock lock; return size_unlocked(); }
-	size_t space() const { irq_lock lock; return space_unlocked(); }
-	bool empty() const { irq_lock lock; return head_ == tail_; }
+	size_t Size() const { IrqLock lock; return SizeUnlocked(); }
+	size_t Space() const { IrqLock lock; return SpaceUnlocked(); }
+	bool Empty() const { IrqLock lock; return head_ == tail_; }
 
 	// 清空缓冲区
-	void clear() {
-		irq_lock lock;
+	void Clear() {
+		IrqLock lock;
 		head_ = 0;
 		tail_ = 0;
 	}
 
 private:
 	// 以下无锁版本仅供已持有锁的内部函数调用
-	size_t size_unlocked() const {
+	size_t SizeUnlocked() const {
 		if (head_ >= tail_) {
 			return head_ - tail_;
 		}
 		return N - tail_ + head_;
 	}
 
-	size_t space_unlocked() const {
+	size_t SpaceUnlocked() const {
 		// 保留一个空位以区分“满”和“空”
-		return N - 1 - size_unlocked();
+		return N - 1 - SizeUnlocked();
 	}
 
 	uint8_t buffer_[N] = {};

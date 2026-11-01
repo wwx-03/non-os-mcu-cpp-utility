@@ -15,8 +15,8 @@
 
 ## 1. EIDE 工程配置
 
-EIDE 工程目录固定为 `<project>/EIDE`，`app/`、`bsp/`、`port/` 与厂商生成的
-`Core/`、`Drivers/` 平级。所有配置都在 `<project>/EIDE/.eide/eide.yml` 里，
+EIDE 工程目录通常是 `<project>/EIDE`（目录名随 IDE）。`main/` 与厂商生成的
+`Core/`、`Drivers/` 平级；所有配置都在 `<工程目录>/.eide/eide.yml` 里，
 **直接改这个文件**，不要只靠 UI 点击。
 
 ### 1.1 工具链与工程来源
@@ -29,24 +29,18 @@ EIDE 工程目录固定为 `<project>/EIDE`，`app/`、`bsp/`、`port/` 与厂�
 `storageLayout` 按芯片真实内存填写（例：STM32F407ZG 为
 `IRAM 0x20000000 + 0x20000`、`IROM 0x08000000 + 0x100000`），不要照抄模板里的近似值。
 
-### 1.2 源目录与排除
+### 1.2 源目录
 
 ```yaml
 srcDirs:
-  - ../app
-  - ../bsp
-  - ../port
+  - ../main
+  - ../main/board
   - ../non-os-mcu-cpp-utility                 # 仓库根目录：header-only，只为了让头文件出现在工程树
-targets:
-  Debug:
-    excludeList:
-      - ../non-os-mcu-cpp-utility/examples    # 必须排除，否则范例的 .cpp 会被一起编译
 ```
 
-- 仓库根目录可以放进 `srcDirs`，但**必须同时用 `excludeList` 排除 `examples/**`**；
-  不想这样做就只保留在 `incList`。
+- 仓库根目录是 header-only，放进 `srcDirs` 只是为了在工程树里看到头文件，不会产生编译产物。
 - `Core/`、`Drivers/`、`startup_*.s` 用 `virtualFolder` 引用，不要复制。
-- `port/` 里只有 `mcu_cmsis.h`，加进 `srcDirs` 只是方便查看，不会有编译产物。
+- `../main` 同时提供 `application.*` 与 `mcu_cmsis.h`，`../main/board` 提供 `board.*`。
 
 ### 1.3 include 路径与宏
 
@@ -62,18 +56,13 @@ targets:
         - ../Drivers/CMSIS/Include
         - ../Drivers/PY32F002B_HAL_Driver/Inc
         - ../Drivers/CMSIS/Device/PY32F0xx/Include
-        - ../app
-        - ../bsp
-        - ../devices
+        - ../main
+        - ../main/board
         - ../non-os-mcu-cpp-utility
-        - ../port
 ```
 
-`../port` 不能漏：`irq_lock.hpp` 通过它找到 `mcu_cmsis.h`。
-
-`incList` 里的 `../devices` 服务于 `devices/` 层。DIP / Hybrid 还要额外加工程根目录 `..`：
-这样 `app/` 可以写 `#include "devices/board.hpp"`，`bsp/*.cpp` 可以写
-`#include "bsp/gpio_led.hpp"`。`app/` 的源码不得 `#include "bsp/...`，由目录规则与 CI 检查保证。
+`../main` 不能漏：`irq_lock.hpp` 通过它找到 `mcu_cmsis.h`，`board.hpp` 也在这里。
+`../main/board` 供 `board.cpp` 里的 `#include "serial.hpp"` 之类的驱动头使用。
 
 ### 1.4 编译与链接选项（AC6 / Keil armclang）
 
@@ -115,7 +104,7 @@ GCC 的 `no-exceptions` / `no-rtti` / `one-elf-section-*` 属于 `global` 组，
 
 ## 2. 完整 eide.yml 模板
 
-EIDE 工程目录固定为 `<project>/EIDE`，`.eide/eide.yml` 的关键字段如下（路径相对 `EIDE/`；范例位于 `examples/py32f002b_start_kit`，所以仓库根目录是 `../../..`，普通工程通常是 `../non-os-mcu-cpp-utility`）。
+`.eide/eide.yml` 的关键字段如下（路径相对工程文件所在目录；仓库根目录按实际位置填写，下例为 `../non-os-mcu-cpp-utility`）。
 
 > **先选对工具链**：Keil / CubeMX 导入的 `MDK-ARM` 工程用 AC6 + EIDE 生成的 `.sct`；GCC 工程才用下面的 GCC 模板 + 厂商 `.ld`。不要把两者混用。
 
@@ -125,9 +114,8 @@ name: <project>
 type: ARM
 deviceName: PY32F002Bx5
 srcDirs:
-  - ../app
-  - ../bsp
-  - ../port
+  - ../main
+  - ../main/board
   - ../non-os-mcu-cpp-utility
 virtualFolder:            # Core / Drivers / startup 用虚拟目录引用，不复制
   name: <virtual_root>
@@ -173,13 +161,9 @@ targets:
         - ../Drivers/CMSIS/Include
         - ../Drivers/PY32F002B_HAL_Driver/Inc
         - ../Drivers/CMSIS/Device/PY32F0xx/Include
-        - ../app
-        - ../bsp
-        - ../devices
+        - ../main
+        - ../main/board
         - ../non-os-mcu-cpp-utility
-        - ../port
-    excludeList:
-      - ../non-os-mcu-cpp-utility/examples
     toolchain: GCC
     toolchainConfigMap:
       GCC:
@@ -216,9 +200,8 @@ targets:
 
 ```yaml
 srcDirs:
-  - ../app
-  - ../bsp
-  - ../port
+  - ../main
+  - ../main/board
   - ../non-os-mcu-cpp-utility
 virtualFolder:
   name: <virtual_root>
@@ -241,13 +224,9 @@ targets:
         - ../Drivers/STM32F4xx_HAL_Driver/Inc
         - ../Drivers/CMSIS/Device/ST/STM32F4xx/Include
         - ../Drivers/CMSIS/Include
-        - ../app
-        - ../bsp
-        - ../devices
+        - ../main
+        - ../main/board
         - ../non-os-mcu-cpp-utility
-        - ../port
-    excludeList:
-      - ../non-os-mcu-cpp-utility/examples
     toolchain: AC6
     toolchainConfigMap:
       AC6:
@@ -282,8 +261,7 @@ targets:
 - **工具链与工程来源一致**：`MDK-ARM/*.uvprojx` 工程用 AC6 + `../MDK-ARM/startup_*.s` + `useCustomScatterFile: false`；GCC 工程用 GCC + CMSIS `Templates/gcc/startup_*.s` + 厂商 `.ld`（`useCustomScatterFile: true`）。
 - AC6 的 `CXX_FLAGS` 只能写 armclang 参数（`-fno-exceptions -fno-rtti`），不要混入 `--specs=nosys.specs`、`-Wl,...` 等 GCC 选项。
 - `storageLayout` 的 RAM/ROM 按芯片数据手册填写，构建后核对生成的 `.sct`。
-- `srcDirs` 放进仓库根目录时，**必须**同步排除 `examples/**`；否则范例的 `.cpp` 会被编译进当前工程。
-- `../port` 必须同时出现在 `incList`，否则 `irq_lock.hpp` 找不到 `mcu_cmsis.h`。
+- `../main` 必须同时出现在 `incList`，否则 `irq_lock.hpp` 找不到 `mcu_cmsis.h`，`board.hpp` 也找不到。
 - `language-cpp` 必须是 `c++17`；`-fno-exceptions -fno-rtti` 必须打开。
 - `py32f002b_hal_conf.h` / `stm32f4xx_hal_conf.h` 打开的每个 HAL 模块都要在 `virtualFolder` 的 `Src` 列表里有对应 `.c`。
 - `.vscode/tasks.json` 与 `uploadConfigMap` 的 ELF 路径要和 `outDir/<target>/<name>.elf` 一致。
@@ -324,12 +302,12 @@ targets:
     <File>
       <FileName>application.cpp</FileName>
       <FileType>8</FileType>
-      <FilePath>../app/application.cpp</FilePath>
+      <FilePath>../main/application.cpp</FilePath>
     </File>
     <File>
       <FileName>board.cpp</FileName>
       <FileType>8</FileType>
-      <FilePath>../bsp/board.cpp</FilePath>
+      <FilePath>../main/board/board.cpp</FilePath>
     </File>
   </Files>
 </Group>
@@ -345,12 +323,12 @@ targets:
   <VariousControls>
     <MiscControls>-fno-exceptions</MiscControls>
     <Define>USE_HAL_DRIVER,STM32F407xx</Define>
-    <IncludePath>../Core/Inc;../Drivers/STM32F4xx_HAL_Driver/Inc;../Drivers/STM32F4xx_HAL_Driver/Inc/Legacy;../Drivers/CMSIS/Device/ST/STM32F4xx/Include;../Drivers/CMSIS/Include;../app;../bsp;../port;../non-os-mcu-cpp-utility</IncludePath>
+    <IncludePath>../Core/Inc;../Drivers/STM32F4xx_HAL_Driver/Inc;../Drivers/STM32F4xx_HAL_Driver/Inc/Legacy;../Drivers/CMSIS/Device/ST/STM32F4xx/Include;../Drivers/CMSIS/Include;../main;../main/board;../non-os-mcu-cpp-utility</IncludePath>
   </VariousControls>
 </Cads>
 ```
 
-- `IncludePath` 必须追加 `../app;../bsp;../port;../non-os-mcu-cpp-utility`，
+- `IncludePath` 必须追加 `../main;../main/board;../non-os-mcu-cpp-utility`，
   否则 `board.hpp`、`queue.hpp`、`mcu_cmsis.h` 找不到。
 - `<v6Rtti>0</v6Rtti>` 关闭 RTTI；异常用 `<MiscControls>-fno-exceptions</MiscControls>` 关闭。
 - 工程里若还有 `-Wno-register`、`--specs=*`、`-Wl,*` 等 GCC 选项，一并删掉。
@@ -371,8 +349,8 @@ targets:
 armclang --target=arm-arm-none-eabi -mcpu=cortex-m4 -mfpu=fpv4-sp-d16 -mfloat-abi=hard `
   -c -std=c++17 -fno-exceptions -fno-rtti -DUSE_HAL_DRIVER -DSTM32F407xx `
   -I../Core/Inc -I../Drivers/CMSIS/Include -I../Drivers/STM32F4xx_HAL_Driver/Inc `
-  -I../app -I../bsp -I../devices -I../non-os-mcu-cpp-utility -I../port `
-  ../app/application.cpp -o application.o
+  -I../main -I../main/board -I../non-os-mcu-cpp-utility `
+  ../main/application.cpp -o application.o
 ```
 
 ### 4.2 EIDE / GCC
@@ -383,9 +361,9 @@ armclang --target=arm-arm-none-eabi -mcpu=cortex-m4 -mfpu=fpv4-sp-d16 -mfloat-ab
 arm-none-eabi-g++ -std=c++17 -fno-exceptions -fno-rtti -Wno-register `
   -mcpu=cortex-m0plus -mthumb -DPY32F002Bx5 -DUSE_HAL_DRIVER `
   -I../Core/INC -I../Drivers/CMSIS/Include -I../Drivers/PY32F002B_HAL_Driver/Inc `
-  -I../Drivers/CMSIS/Device/PY32F0xx/Include -I../app -I../bsp -I../devices `
-  -I../non-os-mcu-cpp-utility -I../port `
-  -c ../app/application.cpp -o application.o
+  -I../Drivers/CMSIS/Device/PY32F0xx/Include -I../main -I../main/board `
+  -I../non-os-mcu-cpp-utility `
+  -c ../main/application.cpp -o application.o
 ```
 
 链接阶段再补
@@ -411,7 +389,6 @@ arm-none-eabi-g++ -std=c++17 -fno-exceptions -fno-rtti -Wno-register `
 | --- | --- |
 | 从 Keil / CubeMX(MDK-ARM) 导入的工程把 EIDE 工具链改成 GCC（或反向） | 沿用原工具链：AC6 用 `../MDK-ARM/startup_*.s` + EIDE 生成的 `.sct`，GCC 才用 CMSIS gcc 启动文件和 `.ld` |
 | `<uAC6>1</uAC6>` 写进 `<TargetCommonOption>` | 必须写在 `<Target>` 下（与 `<pCCUsed>` 同级），否则 µVision 继续用 AC5 |
-| 只改 EIDE 不管 `MDK-ARM/*.uvprojx` | Keil 工程也要加 `app/`、`bsp/`、`port/` 源文件与 include 路径，否则用户用 Keil 打开直接编译失败 |
-| EIDE 把仓库根目录加进 `srcDirs` 却不排除 `examples/**` | 加 `excludeList`，或只把仓库根目录放进 `incList` |
+| 只改 EIDE 不管 `MDK-ARM/*.uvprojx` | Keil 工程也要加 `main/`、`main/board/` 源文件与 include 路径，否则用户用 Keil 打开直接编译失败 |
 | AC6 工程里出现 `--specs=*` / `-Wl,*` / `-Wno-register` | 删除 GCC 参数 |
 | GCC 工程里出现 `CXX_FLAGS` / `misc-controls` 等 AC6 键 | 使用 `global.*` 配置组 |

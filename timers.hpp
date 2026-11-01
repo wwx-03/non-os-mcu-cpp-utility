@@ -5,25 +5,25 @@
 #include "irq_lock.hpp"
 
 // 软件定时器（单链表，无动态内存）。
-// 移植：把 timer::OnMilliSecondTick() 放进 1ms 中断即可，所有已创建的定时器都会原位更新。
-// 回调在中断上下文中执行，应保持简短；回调内可以安全调用 start/stop/reset/change_period/destroy。
-class timer {
+// 移植：把 Timer::OnMilliSecondTick() 放进 1ms 中断即可，所有已创建的定时器都会原位更新。
+// 回调在中断上下文中执行，应保持简短；回调内可以安全调用 Start/Stop/Reset/ChangePeriod/Destroy。
+class Timer {
 public:
-	using callback_t = void (*)(void *context);
+	using _Callback = void (*)(void *context);
 
-	timer() = default;
-	~timer() { destroy(); }
+	Timer() = default;
+	~Timer() { Destroy(); }
 
-	timer(const timer &) = delete;
-	timer &operator=(const timer &) = delete;
+	Timer(const Timer &) = delete;
+	Timer &operator=(const Timer &) = delete;
 
 	// period_ms 必须 >= 1；reload 为 true 时周期触发，为 false 时单次触发
-	bool create(const uint32_t period_ms, const bool reload, callback_t cb, void *context = nullptr) {
+	bool Create(const uint32_t period_ms, const bool reload, _Callback cb, void *context = nullptr) {
 		if (period_ms == 0) {
 			return false;
 		}
 
-		irq_lock lock;
+		IrqLock lock;
 		if (bound_) {
 			return false;
 		}
@@ -42,13 +42,13 @@ public:
 		return true;
 	}
 
-	void destroy() {
-		irq_lock lock;
+	void Destroy() {
+		IrqLock lock;
 		if (!bound_) {
 			return;
 		}
 
-		timer **link = &head_;
+		Timer **link = &head_;
 		while (*link && *link != this) {
 			link = &(*link)->next_;
 		}
@@ -67,8 +67,8 @@ public:
 	}
 
 	// 启动并重新计时
-	bool start() {
-		irq_lock lock;
+	bool Start() {
+		IrqLock lock;
 		if (!bound_) {
 			return false;
 		}
@@ -77,24 +77,24 @@ public:
 		return true;
 	}
 
-	void stop() {
-		irq_lock lock;
+	void Stop() {
+		IrqLock lock;
 		active_ = false;
 	}
 
 	// 清零已计时长，不改变运行状态
-	void reset() {
-		irq_lock lock;
+	void Reset() {
+		IrqLock lock;
 		cnt_ms_ = 0;
 	}
 
 	// 修改周期并重新计时
-	bool change_period(const uint32_t period_ms) {
+	bool ChangePeriod(const uint32_t period_ms) {
 		if (period_ms == 0) {
 			return false;
 		}
 
-		irq_lock lock;
+		IrqLock lock;
 		if (!bound_) {
 			return false;
 		}
@@ -103,25 +103,25 @@ public:
 		return true;
 	}
 
-	bool is_created() const { irq_lock lock; return bound_; }
-	bool is_active() const { irq_lock lock; return active_; }
-	uint32_t period_ms() const { irq_lock lock; return period_ms_; }
+	bool IsCreated() const { IrqLock lock; return bound_; }
+	bool IsActive() const { IrqLock lock; return active_; }
+	uint32_t PeriodMs() const { IrqLock lock; return period_ms_; }
 
 	// 由 1ms 中断调用
 	static void OnMilliSecondTick() {
-		timer *current = head_;
+		Timer *current = head_;
 		while (current) {
-			timer *next = current->next_;
+			Timer *next = current->next_;
 
 			if (current->bound_ && current->active_) {
 				if (++current->cnt_ms_ >= current->period_ms_) {
 					current->cnt_ms_ = 0;
-					// 先失活再回调：单次定时器的回调里可以重新 start()
+					// 先失活再回调：单次定时器的回调里可以重新 Start()
 					if (!current->reload_) {
 						current->active_ = false;
 					}
 
-					callback_t cb = current->cb_;
+					_Callback cb = current->cb_;
 					void *context = current->context_;
 					if (cb) {
 						cb(context);
@@ -134,10 +134,10 @@ public:
 	}
 
 private:
-	static inline timer *head_ = nullptr;
+	static inline Timer *head_ = nullptr;
 
-	timer *next_ = nullptr;
-	callback_t cb_ = nullptr;
+	Timer *next_ = nullptr;
+	_Callback cb_ = nullptr;
 	void *context_ = nullptr;
 	uint32_t period_ms_ = 0;
 	volatile uint32_t cnt_ms_ = 0;

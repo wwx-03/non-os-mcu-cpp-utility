@@ -161,3 +161,28 @@
 - 模板 `application.cpp.txt`、`application_dip.cpp.txt`、`board_example.cpp.txt` 用 GCC 做过编译验证
   （`board_example` 配桩 HAL）。
 - 宿主工程的等价构建（源列表剔除模板文件）通过；模板改名后 `srcDirs` 扫描不会再命中它们。
+
+## 0014 — 2026-11-02
+
+### 修改
+- 头文件命名统一为 PascalCase：`queue` → `Queue`，`stream_buffer` → `StreamBuffer`，
+  `timer` → `Timer`，`irq_lock` → `IrqLock`；方法统一为 PascalCase
+  （`Push` / `Pop` / `Empty` / `Full` / `Size` / `Clear`、`Write` / `Read` / `Peek` / `Skip` / `Space`、
+  `Create` / `Destroy` / `Start` / `Stop` / `Reset` / `ChangePeriod` / `IsCreated` / `IsActive` / `PeriodMs`）。
+- 公开但不需要用户书写的类型加 `_` 前缀：`Timer::_Callback`（原 `timer::callback_t`）。
+- `irq_lock.hpp` 直接 `#include <stdint.h>`，不再依赖 `mcu_cmsis.h` 间接提供 `uint32_t`。
+- `Timer::OnMilliSecondTick()` 保持原名，仍是 1ms tick 的唯一入口。
+
+### 删除
+- `examples/`（`py32f002b_start_kit`、`stm32f407_start_kit`）：按 `app/bsp/devices/port` 分层，
+  与新 `SKILL.md` 的 `main/` 单一结构冲突。
+- `.github/skills/mcu-baremetal-event-loop/templates/`：旧结构骨架，同样与新 SKILL 冲突。
+- `.github/skills/mcu-baremetal-event-loop/checklists/bring-up.md`：检查项已并入 `SKILL.md` 的完成标准。
+- `.github/skills/mcu-baremetal-event-loop/references/adapter-templates.md`：DIP / 抽象 `Board` 设计说明，已废弃。
+
+### 文档
+- `SKILL.md`：改为 `main/` 单一结构 + 分阶段生成（读厂商基线 → 空骨架 → 逐个外设），
+  设备层 `Board::Init()` / 应用层 `Application::Start()` 分工，API 表与示例同步新命名。
+- `references/platform-profile.md`：去掉 Layered / DIP / Hybrid 选型，改为读厂商基线的契约表。
+- `references/porting.md`、`references/toolchains.md`：路径从 `app/bsp/port/devices` 改为 `main/` 与 `main/board/`。
+- `README.md`：同步新 API 与目录结构，移除范例工程与架构模式章节。
