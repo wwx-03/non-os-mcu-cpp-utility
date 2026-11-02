@@ -35,6 +35,7 @@ EIDE 工程目录通常是 `<project>/EIDE`（目录名随 IDE）。`main/` 与�
 srcDirs:
   - ../main
   - ../main/board
+  - ../main/serial             # 每个外设目录都加
   - ../non-os-mcu-cpp-utility                 # 仓库根目录：header-only，只为了让头文件出现在工程树
 ```
 
@@ -58,11 +59,12 @@ targets:
         - ../Drivers/CMSIS/Device/PY32F0xx/Include
         - ../main
         - ../main/board
+        - ../main/serial           # 每个外设目录都加：board.hpp 用短名 include
         - ../non-os-mcu-cpp-utility
 ```
 
 `../main` 不能漏：`irq_lock.hpp` 通过它找到 `mcu_cmsis.h`，`board.hpp` 也在这里。
-`../main/board` 供 `board.cpp` 里的 `#include "serial.hpp"` 之类的驱动头使用。
+`../main/board` 供 `board.cpp` 使用；`board.hpp` 用短名 `#include "serial.hpp"`，所以**每个外设目录**（`../main/serial`、`../main/key`…）都要加进 include 路径。
 
 ### 1.4 编译与链接选项（AC6 / Keil armclang）
 
@@ -116,6 +118,7 @@ deviceName: PY32F002Bx5
 srcDirs:
   - ../main
   - ../main/board
+  - ../main/serial             # 每个外设目录都加
   - ../non-os-mcu-cpp-utility
 virtualFolder:            # Core / Drivers / startup 用虚拟目录引用，不复制
   name: <virtual_root>
@@ -163,6 +166,7 @@ targets:
         - ../Drivers/CMSIS/Device/PY32F0xx/Include
         - ../main
         - ../main/board
+        - ../main/serial           # 每个外设目录都加：board.hpp 用短名 include
         - ../non-os-mcu-cpp-utility
     toolchain: GCC
     toolchainConfigMap:
@@ -202,6 +206,7 @@ targets:
 srcDirs:
   - ../main
   - ../main/board
+  - ../main/serial             # 每个外设目录都加
   - ../non-os-mcu-cpp-utility
 virtualFolder:
   name: <virtual_root>
@@ -226,6 +231,7 @@ targets:
         - ../Drivers/CMSIS/Include
         - ../main
         - ../main/board
+        - ../main/serial           # 每个外设目录都加：board.hpp 用短名 include
         - ../non-os-mcu-cpp-utility
     toolchain: AC6
     toolchainConfigMap:

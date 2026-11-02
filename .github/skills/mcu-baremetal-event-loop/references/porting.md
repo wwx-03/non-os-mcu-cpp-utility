@@ -107,9 +107,9 @@ extern "C" void TIMx_IRQHandler(void)
 本仓库是 header-only，正确做法是把仓库根目录加入 **include 路径**
 （例如 EIDE 的 `incList`），不需要编译任何 `.cpp`。
 
-工程需要把 `main/`、`main/board/`、`utility/` 都放进 include 路径：
-`irq_lock.hpp` 靠 `main/` 找到 `mcu_cmsis.h`，`board.cpp` 靠 `main/board/` 找到
-`#include "serial.hpp"` 之类的驱动头。
+工程需要把 `main/`、`main/board/`、`utility/` 与**每个外设目录**（`main/serial/`、`main/key/`…）都放进 include 路径：
+`irq_lock.hpp` 靠 `main/` 找到 `mcu_cmsis.h`，`board.hpp` 用短名 `#include "serial.hpp"`，
+靠 `main/serial/` 找到驱动头。每加一个外设目录，就同步加一条 include 路径。
 
 ## 6. 验证
 

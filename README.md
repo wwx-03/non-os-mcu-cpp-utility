@@ -85,10 +85,11 @@ int main()
 
 配套的骨架是：**中断只投递事件 → `Application` 的事件循环统一派发 → 静态内存 → `IrqLock` 保护共享状态**。
 
-- `main/`：自有代码的唯一根目录，放 `application.hpp/.cpp`、`mcu_cmsis.h`、必有的 `board/`、按外设可选的 `serial/` 等；
+- `main/`：自有代码的唯一根目录，放 `application.hpp/.cpp`、`mcu_cmsis.h`、必有的 `board/`；外设目录（`serial/`、`key/`、`led/`…）只在需要时创建；
+- `Board` 核心只有 `GetInstance()` 与 `Init()`，`GetSerial` / `GetKey` / `GetLed` / `RefreshWatchdog` 只在需求包含该外设时出现；
 - `Application`：全工程唯一的事件循环，也是唯一持有事件队列的地方。中断通过 `PostXxx()` 投递，`Start()` 里 `Pop` 后按事件号派发；
 - `Board`：具体类，是应用获取板载设备的唯一入口，负责持有厂商句柄、构造驱动对象、独占并转发厂商弱回调；
-- `main/<periph>/`：具体外设驱动（`Serial`、`Key`、`Led`…），构造函数只存句柄，`Init()` 里才 arm 中断。
+- `main/<periph>/`：可选，具体外设驱动（`Serial`、`Key`、`Led`…），构造函数只存句柄，`Init()` 里才 arm 中断。按需复制的模板见 [optional-peripherals.md](./.github/skills/mcu-baremetal-event-loop/references/optional-peripherals.md)。
 
 完整规则见 [SKILL.md](./.github/skills/mcu-baremetal-event-loop/SKILL.md)。
 

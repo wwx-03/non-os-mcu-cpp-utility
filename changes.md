@@ -193,3 +193,33 @@
 - `LICENSE`：MIT 许可证，版权署名 `wwx-03`。
 - 四个头文件顶部加 SPDX 头：`// SPDX-License-Identifier: MIT` + 版权行。
 - `README.md` 新增「许可证」一节。
+
+## 0016 — 2026-11-02
+
+### 修改
+- `SKILL.md`：消除 5 处会导致生成结果不一致的歧义
+  - 驱动头 include：`board.hpp` 写 `#include "serial.hpp"`，include 路径必须包含每个外设目录（`main/serial/`、`main/key/`…）。
+  - 设备回调统一在 `Application::Start()` 里、`Board::Init()` 之前注册，并给出串口 / 按键的注册代码。
+  - 新增「初始化顺序与职责边界」：厂商 `main()` 负责时钟 / `HAL_Init` / `MX_*_Init`；`Board` 构造只构造设备对象并配置厂商没做的板级 GPIO；`Board::Init()` 只让设备就绪。
+  - 新增「外设契约：Key 与 Led」：`Led` 无中断；`Key` 内部用 `Timer` 消抖并产生 `Pressed` / `Released` / `LongPressed`，长按判定不放在 `Application`。
+  - 新增「Timer：谁持有、何时 Create / Start」：`Application`、`Board`、设备都可持有；构造函数 `Create`，`Start()` / `Init()` 里 `Start`。
+  - `Queue` 说明改为"多中断生产者 + 单主循环消费者"。
+  - 睡眠改为"关中断检查 + `__WFI()`"，避免检查与睡眠之间丢唤醒。
+- `references/toolchains.md`、`references/porting.md`：include 路径补 `../main/serial` 示例，并说明每加一个外设目录就加一条。
+
+## 0017 — 2026-11-02
+
+### 新增
+- `references/optional-peripherals.md`：可选外设模板。含需求清单、`Serial` 完整骨架、`Key` 契约（消抖 + 长按）、`Led` 契约、`Timer` 持有与 `Create`/`Start` 时序、每加一个外设的落地清单与负向检查。
+
+### 修改
+- `SKILL.md`：把"核心"与"可选外设"拆开，避免把 Serial / Key / Led 当成框架必备
+  - 顶部新增「核心与可选」表：核心只有 `application.*`、`mcu_cmsis.h`、`board/`、`Board::GetInstance()` / `Init()`、`Application::Start()` / `Queue` / `IrqLock`。
+  - `Board` API 拆成「核心 API」与「可选 API」；新增"空骨架 Board 只有 `GetInstance()` / `Init()`"。
+  - 第 1 步增加空骨架硬检查（无 `GetSerial` / `GetKey` / `GetLed` / `RefreshWatchdog`、无外设成员、无外设目录、无弱回调、无外设事件）。
+  - 第 2 步改为「按需加第一个外设（可选）」，正文只留四步 + 驱动通用规则 + 可选外设索引，不再内联整段串口实现。
+  - 回调注册示例标注"仅当本工程有该外设时保留"；`Board::Init()` 与初始化顺序表改为"只调用本工程实际存在的设备"。
+  - Key / Led / Timer 的完整契约移出主体，改为指向 `references/optional-peripherals.md`。
+  - DoD 改为"骨架阶段全部必过 + 外设阶段按实际外设条件适用"；smoke test 允许用 GPIO 翻转或调试变量代替串口。
+  - 检查命令新增空骨架负向检查；反模式新增"预埋未请求外设"。
+- `README.md`：`main/` 与外设说明标注可选，并链接可选外设模板。
